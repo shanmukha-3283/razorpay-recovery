@@ -5,6 +5,7 @@ import {
   ScrollText,
   ReceiptText,
   BadgeCheck,
+  Mail,
   Moon,
   Sun,
 } from "lucide-react";
@@ -17,6 +18,7 @@ const navItems = [
   { to: "/subscriptions", label: "Subscriptions", icon: ReceiptText },
   { to: "/events", label: "Raw Events", icon: ScrollText },
   { to: "/recovery", label: "Recovery", icon: Repeat },
+  { to: "/deliveries", label: "Deliveries", icon: Mail },
   { to: "/audit", label: "Audit Ledger", icon: BadgeCheck },
 ];
 

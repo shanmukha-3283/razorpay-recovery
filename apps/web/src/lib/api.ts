@@ -39,4 +39,10 @@ export const api = {
       `/audit-ledger${qs}`
     );
   },
+  deliveries: (params?: Record<string, string>) => {
+    const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return request<import("./types").Paginated<import("./types").Delivery>>(
+      `/deliveries${qs}`
+    );
+  },
 };

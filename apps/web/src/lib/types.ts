@@ -89,3 +89,16 @@ export type Stats = {
   retriesFired: number;
   lastRecoveredAt: string | null;
 };
+
+export type Delivery = {
+  id: string;
+  channel: string;
+  toEmail: string | null;
+  status: string;
+  providerMessageId: string | null;
+  error: string | null;
+  createdAt: string;
+  sentAt: string | null;
+  subscriptionId: string;
+  razorpaySubscriptionId: string | null;
+};

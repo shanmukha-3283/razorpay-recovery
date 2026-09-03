@@ -55,4 +55,12 @@ export function useAudit(filters?: Record<string, string>) {
   });
 }
 
+export function useDeliveries(filters?: Record<string, string>) {
+  return useQuery({
+    queryKey: ["deliveries", filters],
+    queryFn: () => api.deliveries(filters),
+    placeholderData: (prev) => prev,
+  });
+}
+
 export type { RecoveryAttempt, SubscriptionDetail };

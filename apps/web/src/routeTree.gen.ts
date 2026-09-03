@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuditRouteImport } from './routes/audit'
+import { Route as DeliveriesRouteImport } from './routes/deliveries'
 import { Route as EventsRouteImport } from './routes/events'
 import { Route as RecoveryRouteImport } from './routes/recovery'
 import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
@@ -24,6 +25,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuditRoute = AuditRouteImport.update({
   id: '/audit',
   path: '/audit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeliveriesRoute = DeliveriesRouteImport.update({
+  id: '/deliveries',
+  path: '/deliveries',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EventsRoute = EventsRouteImport.update({
@@ -50,6 +56,7 @@ const SubscriptionsIdRoute = SubscriptionsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
+  '/deliveries': typeof DeliveriesRoute
   '/events': typeof EventsRoute
   '/recovery': typeof RecoveryRoute
   '/subscriptions': typeof SubscriptionsRouteWithChildren
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
+  '/deliveries': typeof DeliveriesRoute
   '/events': typeof EventsRoute
   '/recovery': typeof RecoveryRoute
   '/subscriptions': typeof SubscriptionsRouteWithChildren
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
+  '/deliveries': typeof DeliveriesRoute
   '/events': typeof EventsRoute
   '/recovery': typeof RecoveryRoute
   '/subscriptions': typeof SubscriptionsRouteWithChildren
@@ -77,6 +86,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/audit'
+    | '/deliveries'
     | '/events'
     | '/recovery'
     | '/subscriptions'
@@ -85,6 +95,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/audit'
+    | '/deliveries'
     | '/events'
     | '/recovery'
     | '/subscriptions'
@@ -93,6 +104,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/audit'
+    | '/deliveries'
     | '/events'
     | '/recovery'
     | '/subscriptions'
@@ -102,6 +114,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuditRoute: typeof AuditRoute
+  DeliveriesRoute: typeof DeliveriesRoute
   EventsRoute: typeof EventsRoute
   RecoveryRoute: typeof RecoveryRoute
   SubscriptionsRoute: typeof SubscriptionsRouteWithChildren
@@ -121,6 +134,13 @@ declare module '@tanstack/react-router' {
       path: '/audit'
       fullPath: '/audit'
       preLoaderRoute: typeof AuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/deliveries': {
+      id: '/deliveries'
+      path: '/deliveries'
+      fullPath: '/deliveries'
+      preLoaderRoute: typeof DeliveriesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/events': {
@@ -169,6 +189,7 @@ const SubscriptionsRouteWithChildren = SubscriptionsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuditRoute: AuditRoute,
+  DeliveriesRoute: DeliveriesRoute,
   EventsRoute: EventsRoute,
   RecoveryRoute: RecoveryRoute,
   SubscriptionsRoute: SubscriptionsRouteWithChildren,

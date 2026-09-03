@@ -7,6 +7,7 @@ import eventsRoute from "./routes/events.js";
 import recoveryRoute from "./routes/recovery.js";
 import auditRoute from "./routes/audit.js";
 import statsRoute from "./routes/stats.js";
+import deliveriesRoute from "./routes/deliveries.js";
 import { startWorker } from "./queue/worker.js";
 
 const app = new Hono();
@@ -23,6 +24,7 @@ app.route("/api/events", eventsRoute);
 app.route("/api/recovery-attempts", recoveryRoute);
 app.route("/api/audit-ledger", auditRoute);
 app.route("/api/stats", statsRoute);
+app.route("/api/deliveries", deliveriesRoute);
 
 startWorker();
 

@@ -116,3 +116,23 @@ export const auditLedger = pgTable("audit_ledger", {
   timestamp: timestamp("timestamp").defaultNow().notNull(),
   metadata: jsonb("metadata"),
 });
+
+export const messageDeliveries = pgTable("message_deliveries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  subscriptionId: uuid("subscription_id")
+    .references(() => subscriptions.id)
+    .notNull(),
+  recoveryAttemptId: uuid("recovery_attempt_id").references(
+    () => recoveryAttempts.id
+  ),
+  channel: varchar("channel", { length: 20 }).notNull(),
+  toEmail: varchar("to_email", { length: 255 }),
+  status: varchar("status", { length: 20 })
+    .default("queued")
+    .notNull(),
+  providerMessageId: varchar("provider_message_id", { length: 255 }),
+  error: text("error"),
+  messageBody: text("message_body").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  sentAt: timestamp("sent_at"),
+});

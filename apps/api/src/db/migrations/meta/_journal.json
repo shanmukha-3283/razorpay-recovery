@@ -8,6 +8,13 @@
       "when": 1788432331928,
       "tag": "0000_keen_jimmy_woo",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788457020409,
+      "tag": "0001_cooing_paper_doll",
+      "breakpoints": true
     }
   ]
 }
