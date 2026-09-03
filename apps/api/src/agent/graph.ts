@@ -1,8 +1,13 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { recoveryAttempts, subscriptions } from "../db/schema.js";
+import { payments, recoveryAttempts, subscriptions } from "../db/schema.js";
 import { MAX_ATTEMPTS } from "../queue/retryPolicy.js";
+import {
+  classifyFailure,
+  draftMessage,
+  type FailureClassification,
+} from "./llmService.js";
 
 export const RecoveryState = Annotation.Root({
   subscriptionId: Annotation<string>(),
@@ -13,6 +18,9 @@ export const RecoveryState = Annotation.Root({
   decision: Annotation<string>(),
   reason: Annotation<string>(),
   details: Annotation<Record<string, unknown>>(),
+  errorCode: Annotation<string>(),
+  errorDescription: Annotation<string>(),
+  classification: Annotation<FailureClassification | null>(),
 });
 
 type State = typeof RecoveryState.State;
@@ -37,6 +45,16 @@ async function loadContext(state: State): Promise<Partial<State>> {
     };
   }
 
+  const latestPayment = await db
+    .select({
+      errorCode: payments.errorCode,
+      errorDescription: payments.errorDescription,
+    })
+    .from(payments)
+    .where(eq(payments.subscriptionId, state.subscriptionId))
+    .orderBy(desc(payments.createdAt))
+    .limit(1);
+
   const priorAttempts = await db
     .select({ action: recoveryAttempts.action, status: recoveryAttempts.status })
     .from(recoveryAttempts)
@@ -50,8 +68,29 @@ async function loadContext(state: State): Promise<Partial<State>> {
 
   return {
     status: subscription.status,
+    errorCode: latestPayment[0]?.errorCode ?? "",
+    errorDescription: latestPayment[0]?.errorDescription ?? "",
     details: { priorAttempts: priorAttempts as PriorAttempt[] },
   };
+}
+
+function needsClassification(state: State): boolean {
+  if (state.errorCode || state.errorDescription) return true;
+  const knownStatuses = ["pending", "failed", "halted", "cancelled", "active"];
+  return !knownStatuses.includes(state.status ?? "");
+}
+
+async function llmClassify(state: State): Promise<Partial<State>> {
+  const classification = await classifyFailure({
+    status: state.status,
+    errorCode: state.errorCode,
+    errorDescription: state.errorDescription,
+    amount: state.amount,
+    currency: state.currency,
+    attemptNumber: state.attemptNumber,
+  });
+
+  return { classification };
 }
 
 async function decideAction(state: State): Promise<Partial<State>> {
@@ -59,6 +98,30 @@ async function decideAction(state: State): Promise<Partial<State>> {
     return {
       decision: "halt",
       reason: "maximum retry attempts reached",
+    };
+  }
+
+  const classification = state.classification;
+
+  if (
+    classification &&
+    classification.confidence >= 0.7 &&
+    classification.recoveryHint === "halt"
+  ) {
+    return {
+      decision: "halt",
+      reason: `LLM classified as "${classification.failureCategory}" with high confidence`,
+    };
+  }
+
+  if (
+    classification &&
+    classification.confidence >= 0.7 &&
+    classification.recoveryHint === "adjust_payment_method"
+  ) {
+    return {
+      decision: "adjust",
+      reason: `LLM recommended adjusting payment method (${classification.failureCategory})`,
     };
   }
 
@@ -76,30 +139,50 @@ async function decideAction(state: State): Promise<Partial<State>> {
 
   return {
     decision: "retry",
-    reason: "default recovery action",
+    reason:
+      classification && classification.confidence >= 0.7
+        ? `default recovery with LLM hint (${classification.failureCategory})`
+        : "default recovery action",
   };
 }
 
 async function draftAction(state: State): Promise<Partial<State>> {
+  const classificationMessage = state.classification?.message ?? null;
+
+  const message =
+    classificationMessage ??
+    (await draftMessage({
+      decision: state.decision,
+      reason: state.reason,
+      amount: state.amount,
+      currency: state.currency,
+      attemptNumber: state.attemptNumber,
+    })) ??
+    (state.decision === "adjust"
+      ? "Prompting customer to update payment details for subscription."
+      : "Triggering automated payment retry for subscription.");
+
   return {
     details: {
       ...(state.details ?? {}),
-      message:
-        state.decision === "adjust"
-          ? "Prompting customer to update payment details for subscription."
-          : "Triggering automated payment retry for subscription.",
+      message,
+      failureCategory: state.classification?.failureCategory ?? null,
     },
   };
 }
 
 const graph = new StateGraph(RecoveryState)
   .addNode("loadContext", loadContext)
+  .addNode("llmClassify", llmClassify)
   .addNode("decideAction", decideAction)
   .addNode("draftAction", draftAction)
   .addEdge(START, "loadContext")
-  .addConditionalEdges("loadContext", (state) =>
-    state.decision === "no-op" ? END : "decideAction"
-  )
+  .addConditionalEdges("loadContext", (state) => {
+    if (state.decision === "no-op") return END;
+    if (needsClassification(state)) return "llmClassify";
+    return "decideAction";
+  })
+  .addEdge("llmClassify", "decideAction")
   .addConditionalEdges("decideAction", (state) =>
     state.decision === "halt" ? END : "draftAction"
   )
