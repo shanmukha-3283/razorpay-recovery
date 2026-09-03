@@ -1,6 +1,7 @@
-import { db } from "../db/index.js";
 import { eq } from "drizzle-orm";
+import { db } from "../db/index.js";
 import { subscriptions } from "../db/schema.js";
+import { scheduleRecovery } from "../queue/scheduler.js";
 import { syncCustomer, syncSubscription, syncPayment } from "./sync.js";
 
 type WebhookPayload = Record<string, unknown>;
@@ -22,7 +23,20 @@ async function handlePaymentFailed({ payload }: HandlerContext) {
   const payment = getEntity<Record<string, unknown>>(payload, "payment");
   if (!payment) return;
 
-  const subscriptionId = payment.subscription_id as string | undefined;
+  const razorpaySubscriptionId = payment.subscription_id as string | undefined;
+
+  let internalSubscriptionId: string | undefined;
+
+  if (razorpaySubscriptionId) {
+    const [subscription] = await db
+      .select({ id: subscriptions.id })
+      .from(subscriptions)
+      .where(eq(subscriptions.razorpaySubscriptionId, razorpaySubscriptionId));
+
+    if (subscription) {
+      internalSubscriptionId = subscription.id;
+    }
+  }
 
   await syncPayment(payment.id as string, {
     orderId: (payment.order_id as string) || null,
@@ -35,14 +49,15 @@ async function handlePaymentFailed({ payload }: HandlerContext) {
       (payment.error_description as string) ||
       (payment.error_reason as string) ||
       null,
-    subscriptionId,
+    subscriptionId: internalSubscriptionId,
   });
 
-  if (subscriptionId) {
-    await db
-      .update(subscriptions)
-      .set({ status: "pending", updatedAt: new Date() })
-      .where(eq(subscriptions.razorpaySubscriptionId, subscriptionId));
+  if (internalSubscriptionId) {
+    await scheduleRecovery(
+      internalSubscriptionId,
+      (payment.amount as number) ?? 0,
+      (payment.currency as string) || "INR"
+    );
   }
 }
 
@@ -87,6 +102,14 @@ async function handleSubscriptionPending({ payload }: HandlerContext) {
         null,
       subscriptionId: subscriptionId || undefined,
     });
+  }
+
+  if (subscriptionId) {
+    await scheduleRecovery(
+      subscriptionId,
+      (payment?.amount as number) ?? 0,
+      (payment?.currency as string) || "INR"
+    );
   }
 }
 
