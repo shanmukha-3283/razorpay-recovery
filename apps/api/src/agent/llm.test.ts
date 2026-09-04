@@ -46,6 +46,7 @@ describe("getLLM", () => {
 
   it("builds a Claude model by default", async () => {
     delete process.env.LLM_PROVIDER;
+    process.env.ANTHROPIC_API_KEY = "test-key";
     const { getLLM } = await loadLlm();
     expect(getLLM()).toBeInstanceOf(ChatAnthropic);
   });
