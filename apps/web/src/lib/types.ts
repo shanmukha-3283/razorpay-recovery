@@ -35,6 +35,7 @@ export type Payment = {
   method: string | null;
   errorCode: string | null;
   errorDescription: string | null;
+  invoiceId: string | null;
   createdAt: string;
 };
 

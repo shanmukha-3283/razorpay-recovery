@@ -8,6 +8,8 @@ import {
   subscriptions,
 } from "../db/schema.js";
 import { parsePagination, paginationMeta } from "./pagination.js";
+import { getSubscription, RazorpayApiError } from "../razorpay/client.js";
+import { syncSubscription } from "../handlers/sync.js";
 
 const subscriptionsRoute = new Hono();
 
@@ -95,6 +97,7 @@ subscriptionsRoute.get("/:id", async (c) => {
         method: payments.method,
         errorCode: payments.errorCode,
         errorDescription: payments.errorDescription,
+        invoiceId: payments.invoiceId,
         createdAt: payments.createdAt,
       })
       .from(payments)
@@ -119,6 +122,46 @@ subscriptionsRoute.get("/:id", async (c) => {
   return c.json({
     data: { ...row, payments: paymentsForSub, recoveryAttempts: attemptsForSub },
   });
+});
+
+subscriptionsRoute.post("/:id/sync", async (c) => {
+  const id = c.req.param("id");
+
+  const [sub] = await db
+    .select({
+      id: subscriptions.id,
+      razorpaySubscriptionId: subscriptions.razorpaySubscriptionId,
+      customerId: subscriptions.customerId,
+    })
+    .from(subscriptions)
+    .where(eq(subscriptions.id, id));
+
+  if (!sub) return c.json({ error: "Subscription not found" }, 404);
+  if (!sub.razorpaySubscriptionId) {
+    return c.json({ error: "Subscription has no Razorpay id to sync" }, 400);
+  }
+
+  let remote;
+  try {
+    remote = await getSubscription(sub.razorpaySubscriptionId);
+  } catch (err) {
+    if (err instanceof RazorpayApiError) {
+      return c.json({ error: err.message, code: err.code }, 502);
+    }
+    throw err;
+  }
+
+  await syncSubscription(sub.razorpaySubscriptionId, {
+    customerId: sub.customerId,
+    planId: remote.plan_id ?? null,
+    status: remote.status,
+    currentStart: remote.current_start ?? undefined,
+    currentEnd: remote.current_end ?? undefined,
+    paidCount: remote.paid_count ?? undefined,
+    totalCount: remote.total_count ?? undefined,
+  });
+
+  return c.json({ data: { id: sub.id, status: remote.status, synced: true } });
 });
 
 export default subscriptionsRoute;

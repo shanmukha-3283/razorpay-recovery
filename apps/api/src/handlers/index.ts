@@ -40,6 +40,7 @@ async function handlePaymentFailed({ payload }: HandlerContext) {
 
   await syncPayment(payment.id as string, {
     orderId: (payment.order_id as string) || null,
+    invoiceId: (payment.invoice_id as string) || null,
     amount: (payment.amount as number) ?? null,
     currency: (payment.currency as string) || null,
     status: (payment.status as string) || "failed",
@@ -91,6 +92,7 @@ async function handleSubscriptionPending({ payload }: HandlerContext) {
   if (payment) {
     await syncPayment(payment.id as string, {
       orderId: (payment.order_id as string) || null,
+      invoiceId: (payment.invoice_id as string) || null,
       amount: (payment.amount as number) ?? null,
       currency: (payment.currency as string) || null,
       status: (payment.status as string) || "failed",

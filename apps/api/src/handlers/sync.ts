@@ -84,6 +84,7 @@ export async function syncPayment(
   data: {
     subscriptionId?: string | null;
     orderId?: string | null;
+    invoiceId?: string | null;
     amount?: number | null;
     currency?: string | null;
     status: string;
@@ -98,6 +99,7 @@ export async function syncPayment(
       razorpayPaymentId,
       subscriptionId: data.subscriptionId || null,
       orderId: data.orderId || null,
+      invoiceId: data.invoiceId || null,
       amount: data.amount ?? 0,
       currency: data.currency || "INR",
       status: data.status,
@@ -110,6 +112,7 @@ export async function syncPayment(
       set: {
         subscriptionId: data.subscriptionId || undefined,
         orderId: data.orderId || undefined,
+        invoiceId: data.invoiceId || undefined,
         amount: data.amount ?? undefined,
         currency: data.currency || undefined,
         status: data.status,

@@ -77,6 +77,7 @@ export const payments = pgTable(
     }).notNull(),
     subscriptionId: uuid("subscription_id").references(() => subscriptions.id),
     orderId: varchar("order_id", { length: 100 }),
+    invoiceId: varchar("invoice_id", { length: 100 }),
     amount: integer("amount").notNull(),
     currency: varchar("currency", { length: 10 }).default("INR"),
     status: varchar("status", { length: 50 }).notNull(),

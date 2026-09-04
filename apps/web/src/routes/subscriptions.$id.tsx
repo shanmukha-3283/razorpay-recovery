@@ -1,5 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useSubscription } from "@/service/hooks";
+import { RefreshCw } from "lucide-react";
+import { useSubscription, useSubscriptionSync } from "@/service/hooks";
 import {
   Card,
   CardContent,
@@ -25,6 +26,7 @@ export const Route = createFileRoute("/subscriptions/$id")({
 function SubscriptionDetailPage() {
   const { id } = Route.useParams();
   const { data, isLoading } = useSubscription(id);
+  const syncMutation = useSubscriptionSync();
 
   if (isLoading) return <p className="text-muted-foreground">Loading…</p>;
   if (!data)
@@ -32,7 +34,7 @@ function SubscriptionDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Button variant="ghost" size="sm" asChild>
             <Link to="/subscriptions">← Back</Link>
@@ -45,7 +47,22 @@ function SubscriptionDetailPage() {
             {data.planId ?? "—"}
           </p>
         </div>
-        <Badge>{data.status}</Badge>
+        <div className="flex items-center gap-3">
+          <Badge>{data.status}</Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => syncMutation.mutate(id)}
+            disabled={syncMutation.isPending}
+          >
+            <RefreshCw
+              className={
+                syncMutation.isPending ? "size-4 animate-spin" : "size-4"
+              }
+            />
+            {syncMutation.isPending ? "Syncing…" : "Sync from Razorpay"}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -90,6 +107,7 @@ function SubscriptionDetailPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Payment ID</TableHead>
+                <TableHead>Invoice ID</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Method</TableHead>
@@ -100,7 +118,7 @@ function SubscriptionDetailPage() {
             <TableBody>
               {data.payments.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                     No payments.
                   </TableCell>
                 </TableRow>
@@ -109,6 +127,9 @@ function SubscriptionDetailPage() {
                   <TableRow key={p.id}>
                     <TableCell className="font-mono text-xs">
                       {p.razorpayPaymentId}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {p.invoiceId ?? "—"}
                     </TableCell>
                     <TableCell>{formatINR(p.amount, p.currency ?? "INR")}</TableCell>
                     <TableCell>
@@ -141,30 +162,67 @@ function SubscriptionDetailPage() {
                 <TableHead>Action</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Amount</TableHead>
+                <TableHead>Razorpay</TableHead>
                 <TableHead>Next attempt</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.recoveryAttempts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     No recovery attempts.
                   </TableCell>
                 </TableRow>
               ) : (
-                data.recoveryAttempts.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>#{r.attemptNumber}</TableCell>
-                    <TableCell>{r.action}</TableCell>
-                    <TableCell>
-                      <Badge variant={r.status === "completed" ? "success" : r.status === "failed" ? "destructive" : "warning"}>
-                        {r.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{formatINR(r.amount)}</TableCell>
-                    <TableCell>{formatDateTime(r.nextAttemptAt)}</TableCell>
-                  </TableRow>
-                ))
+                data.recoveryAttempts.map((r) => {
+                  const details = (r.details ?? {}) as {
+                    razorpay?: {
+                      action?: string;
+                      success?: boolean;
+                      shortUrl?: string | null;
+                      error?: string | null;
+                    };
+                  };
+                  const rz = details.razorpay;
+                  return (
+                    <TableRow key={r.id}>
+                      <TableCell>#{r.attemptNumber}</TableCell>
+                      <TableCell>{r.action}</TableCell>
+                      <TableCell>
+                        <Badge variant={r.status === "completed" ? "success" : r.status === "failed" ? "destructive" : "warning"}>
+                          {r.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{formatINR(r.amount)}</TableCell>
+                      <TableCell className="text-xs">
+                        {rz ? (
+                          <>
+                            <span className="font-mono">{rz.action ?? "razorpay"}</span>{" "}
+                            {rz.success ? (
+                              rz.shortUrl ? (
+                                <a
+                                  href={rz.shortUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-primary underline"
+                                >
+                                  open
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground">ok</span>
+                              )
+                            ) : (
+                              <span className="text-destructive">{rz.error ?? "failed"}</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{formatDateTime(r.nextAttemptAt)}</TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

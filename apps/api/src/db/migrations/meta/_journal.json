@@ -15,6 +15,13 @@
       "when": 1788457020409,
       "tag": "0001_cooing_paper_doll",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788501027466,
+      "tag": "0002_warm_thunderbolts",
+      "breakpoints": true
     }
   ]
 }

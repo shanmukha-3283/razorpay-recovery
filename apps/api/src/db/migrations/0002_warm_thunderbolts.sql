@@ -1,0 +1,1 @@
+ALTER TABLE "payments" ADD COLUMN "invoice_id" varchar(100);

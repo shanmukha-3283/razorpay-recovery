@@ -1,4 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { RecoveryAttempt, SubscriptionDetail } from "@/lib/types";
 
@@ -60,6 +64,17 @@ export function useDeliveries(filters?: Record<string, string>) {
     queryKey: ["deliveries", filters],
     queryFn: () => api.deliveries(filters),
     placeholderData: (prev) => prev,
+  });
+}
+
+export function useSubscriptionSync() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.subscriptionSync(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["subscription"] });
+      queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
+    },
   });
 }
 
