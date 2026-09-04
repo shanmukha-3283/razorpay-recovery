@@ -1,0 +1,70 @@
+# Render Blueprint — Razorpay AI Revenue Recovery Agent.
+# Deploy: dashboard → New → Blueprint → select this repo.
+# Then fill every `sync: false` secret below in the Render dashboard.
+services:
+  - type: web
+    name: razorpay-recovery-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    healthCheckPath: /health
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: razorpay-recovery-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: razorpay-recovery-redis
+          property: connectionString
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash
+      - key: RESEND_API_KEY
+        sync: false
+      - key: DELIVERY_FROM_EMAIL
+        sync: false
+      - key: DELIVERY_PROVIDER
+        value: resend
+      # Same-origin serving via the web service's nginx /api proxy keeps
+      # the browser on one origin, so WEB_ORIGIN can stay unset. Set it
+      # only if you call the API directly from another origin.
+      # - key: WEB_ORIGIN
+      #   sync: false
+
+  - type: web
+    name: razorpay-recovery-web
+    runtime: docker
+    dockerfilePath: ./apps/web/Dockerfile
+    plan: free
+    envVars:
+      # Private-network backend address; the entrypoint renders these
+      # into the nginx /api reverse proxy at container start.
+      - key: API_HOST
+        fromService:
+          type: web
+          name: razorpay-recovery-api
+          property: host
+      - key: API_PORT
+        fromService:
+          type: web
+          name: razorpay-recovery-api
+          property: port
+
+databases:
+  - name: razorpay-recovery-db
+    databaseName: razorpay_recovery
+    plan: free
+
+  - name: razorpay-recovery-redis
+    plan: free
