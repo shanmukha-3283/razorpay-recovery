@@ -2,6 +2,8 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const scheduleRecovery = vi.hoisted(() => vi.fn());
 const syncPayment = vi.hoisted(() => vi.fn());
+const syncCustomer = vi.hoisted(() => vi.fn(async () => "cus_internal"));
+const syncSubscription = vi.hoisted(() => vi.fn(async () => "sub_internal"));
 const lookupSub = vi.hoisted(() => vi.fn());
 
 vi.mock("../queue/scheduler.js", () => ({
@@ -9,8 +11,8 @@ vi.mock("../queue/scheduler.js", () => ({
 }));
 
 vi.mock("./sync.js", () => ({
-  syncCustomer: vi.fn(async () => "cus_internal"),
-  syncSubscription: vi.fn(async () => "sub_internal"),
+  syncCustomer,
+  syncSubscription,
   syncPayment,
 }));
 
@@ -30,7 +32,11 @@ describe("dispatchWebhookEvent / getEntity", () => {
   beforeEach(() => {
     scheduleRecovery.mockReset();
     syncPayment.mockReset();
+    syncCustomer.mockReset();
+    syncSubscription.mockReset();
     lookupSub.mockReset();
+    syncCustomer.mockResolvedValue("cus_internal");
+    syncSubscription.mockResolvedValue("sub_internal");
   });
 
   it("extracts the payment object (not the entity string) and schedules recovery", async () => {
@@ -102,5 +108,40 @@ describe("dispatchWebhookEvent / getEntity", () => {
     expect(ok).toBe(true);
     expect(syncPayment).toHaveBeenCalledWith("pay_unknown", expect.any(Object));
     expect(scheduleRecovery).not.toHaveBeenCalled();
+  });
+
+  it("passes the customer name from subscription payloads into syncCustomer", async () => {
+    const payload = {
+      subscription: {
+        entity: "subscription",
+        id: "sub_rzp_9",
+        customer_id: "cus_rzp_9",
+        customer_name: "Priya Nair",
+        plan_id: "plan_1",
+        status: "pending",
+      },
+      payment: {
+        entity: "payment",
+        id: "pay_9",
+        amount: 24900,
+        currency: "INR",
+        status: "failed",
+      },
+    };
+
+    const ok = await dispatchWebhookEvent("subscription.pending", {
+      payload,
+      rawEventId: "raw_3",
+    });
+
+    expect(ok).toBe(true);
+    expect(syncCustomer).toHaveBeenCalledWith(
+      "cus_rzp_9",
+      expect.objectContaining({ name: "Priya Nair" })
+    );
+    expect(syncSubscription).toHaveBeenCalledWith(
+      "sub_rzp_9",
+      expect.objectContaining({ status: "pending" })
+    );
   });
 });

@@ -22,6 +22,13 @@
       "when": 1788501027466,
       "tag": "0002_warm_thunderbolts",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788504802903,
+      "tag": "0003_majestic_giant_girl",
+      "breakpoints": true
     }
   ]
 }

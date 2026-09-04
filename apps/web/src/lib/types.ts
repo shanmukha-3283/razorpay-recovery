@@ -52,10 +52,7 @@ export type RecoveryAttempt = {
   razorpaySubscriptionId: string | null;
 };
 
-export type SubscriptionDetail = Omit<
-  Subscription,
-  "customerName"
-> & {
+export type SubscriptionDetail = Subscription & {
   customerContact: string | null;
   payments: Payment[];
   recoveryAttempts: RecoveryAttempt[];

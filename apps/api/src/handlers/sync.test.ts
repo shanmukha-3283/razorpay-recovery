@@ -65,12 +65,26 @@ describe("sync handlers", () => {
     expect(lastInsert().values.amount).toBe(500);
   });
 
-  it("syncCustomer applies email/contact fallbacks", async () => {
-    await syncCustomer("cus_1", "", null);
+  it("syncCustomer applies email/contact/name fallbacks", async () => {
+    await syncCustomer("cus_1", {
+      email: "",
+      contact: null,
+      name: "Ashish Sharma",
+    });
     expect(lastInsert().values).toMatchObject({
       razorpayCustomerId: "cus_1",
       email: null,
       contact: null,
+      name: "Ashish Sharma",
+    });
+  });
+
+  it("syncCustomer defaults name to null when omitted", async () => {
+    await syncCustomer("cus_1", { email: "a@example.com" });
+    expect(lastInsert().values).toMatchObject({
+      razorpayCustomerId: "cus_1",
+      email: "a@example.com",
+      name: null,
     });
   });
 

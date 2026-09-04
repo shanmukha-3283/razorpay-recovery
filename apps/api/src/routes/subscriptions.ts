@@ -46,7 +46,7 @@ subscriptionsRoute.get("/", async (c) => {
       updatedAt: subscriptions.updatedAt,
       customerId: customers.id,
       customerEmail: customers.email,
-      customerName: customers.contact,
+      customerName: customers.name,
     })
     .from(subscriptions)
     .leftJoin(customers, eq(subscriptions.customerId, customers.id))
@@ -78,6 +78,7 @@ subscriptionsRoute.get("/:id", async (c) => {
       updatedAt: subscriptions.updatedAt,
       customerId: customers.id,
       customerEmail: customers.email,
+      customerName: customers.name,
       customerContact: customers.contact,
     })
     .from(subscriptions)

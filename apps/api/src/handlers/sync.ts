@@ -4,24 +4,26 @@ import { customers, subscriptions, payments } from "../db/schema.js";
 
 export async function syncCustomer(
   razorpayCustomerId: string,
-  email?: string | null,
-  contact?: string | null
+  data?: { email?: string | null; contact?: string | null; name?: string | null }
 ): Promise<string> {
   if (!razorpayCustomerId) return "";
 
-  const emailValue = email || null;
-  const contactValue = contact || null;
+  const emailValue = data?.email || null;
+  const contactValue = data?.contact || null;
+  const nameValue = data?.name || null;
 
   const rows = await db
     .insert(customers)
     .values({
       razorpayCustomerId,
+      name: nameValue,
       email: emailValue,
       contact: contactValue,
     })
     .onConflictDoUpdate({
       target: customers.razorpayCustomerId,
       set: {
+        name: sql`COALESCE(excluded.name, ${customers.name})`,
         email: sql`COALESCE(excluded.email, ${customers.email})`,
         contact: sql`COALESCE(excluded.contact, ${customers.contact})`,
       },

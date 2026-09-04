@@ -74,8 +74,7 @@ async function handleSubscriptionPending({ payload }: HandlerContext) {
 
   const customerId = await syncCustomer(
     (subscription.customer_id as string) || "",
-    undefined,
-    undefined
+    { name: subscription.customer_name as string | undefined }
   );
 
   const subscriptionId = await syncSubscription(
@@ -127,8 +126,7 @@ async function handleSubscriptionHalted({ payload }: HandlerContext) {
 
   const customerId = await syncCustomer(
     (subscription.customer_id as string) || "",
-    undefined,
-    undefined
+    { name: subscription.customer_name as string | undefined }
   );
 
   await syncSubscription(subscription.id as string, {
@@ -151,8 +149,7 @@ async function handleSubscriptionCancelled({ payload }: HandlerContext) {
 
   const customerId = await syncCustomer(
     (subscription.customer_id as string) || "",
-    undefined,
-    undefined
+    { name: subscription.customer_name as string | undefined }
   );
 
   await syncSubscription(subscription.id as string, {

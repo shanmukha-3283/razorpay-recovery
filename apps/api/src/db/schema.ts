@@ -33,6 +33,7 @@ export const customers = pgTable(
     razorpayCustomerId: varchar("razorpay_customer_id", {
       length: 100,
     }).notNull(),
+    name: varchar("name", { length: 255 }),
     email: varchar("email", { length: 255 }),
     contact: varchar("contact", { length: 50 }),
     createdAt: timestamp("created_at").defaultNow().notNull(),

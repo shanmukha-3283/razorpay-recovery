@@ -43,7 +43,8 @@ function SubscriptionDetailPage() {
             {data.razorpaySubscriptionId}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {data.customerEmail ?? data.customerContact ?? "No customer"} · Plan{" "}
+            {data.customerName ?? "No name"} ·{" "}
+            {data.customerEmail ?? data.customerContact ?? "No contact"} · Plan{" "}
             {data.planId ?? "—"}
           </p>
         </div>

@@ -47,7 +47,7 @@ function SubscriptionsPage() {
     {
       header: "Customer",
       cell: ({ row }) =>
-        row.original.customerEmail ?? row.original.customerName ?? "—",
+        row.original.customerName ?? row.original.customerEmail ?? "—",
     },
     { header: "Plan", accessorKey: "planId", cell: ({ getValue }) => getValue() as string ?? "—" },
     {

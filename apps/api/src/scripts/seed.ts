@@ -28,19 +28,19 @@ async function seed() {
   await resetSeed();
 
   const [c1] = await sql`
-    insert into customers (razorpay_customer_id, email, contact)
-    values ('seed_cus_ashish', 'ashish@example.com', '+919000000001')
+    insert into customers (razorpay_customer_id, name, email, contact)
+    values ('seed_cus_ashish', 'Ashish Sharma', 'ashish@example.com', '+919000000001')
     returning id
   `;
   const [c2] = await sql`
-    insert into customers (razorpay_customer_id, email, contact)
-    values ('seed_cus_priya', 'priya@example.com', '+919000000002')
+    insert into customers (razorpay_customer_id, name, email, contact)
+    values ('seed_cus_priya', 'Priya Nair', 'priya@example.com', '+919000000002')
     on conflict (razorpay_customer_id) do nothing
     returning id
   `;
   const [c3] = await sql`
-    insert into customers (razorpay_customer_id, email, contact)
-    values ('seed_cus_rohan', 'rohan@example.com', '+919000000003')
+    insert into customers (razorpay_customer_id, name, email, contact)
+    values ('seed_cus_rohan', 'Rohan Mehta', 'rohan@example.com', '+919000000003')
     on conflict (razorpay_customer_id) do nothing
     returning id
   `;
@@ -104,6 +104,14 @@ async function seed() {
       (${r1.id}, 'retry', 19900, '{"attempt":1,"note":"first retry"}'),
       (${r2.id}, 'retry', 19900, '{"attempt":2,"note":"second retry"}'),
       (${r3.id}, 'halt', 19900, '{"attempt":3,"note":"max attempts reached"}')
+  `;
+
+  // Demo message deliveries so the Deliveries page is not empty.
+  await sql`
+    insert into message_deliveries (subscription_id, recovery_attempt_id, channel, to_email, status, provider_message_id, error, message_body, sent_at) values
+      (${s3.id}, ${r1.id}, 'email', 'rohan@example.com', 'sent', 'seed_msg_1', null, 'Your payment of 199 INR failed. We will retry shortly.', now() - interval '1 hour'),
+      (${s3.id}, ${r2.id}, 'email', 'rohan@example.com', 'failed', null, 'Resend unreachable in demo seed', 'Your payment of 199 INR failed. Please update your payment method.', null),
+      (${s2.id}, null, 'email', 'priya@example.com', 'skipped', null, 'no drafted message for demo row', 'Demo skipped delivery row.', null)
   `;
 
   console.log("Seed complete.");
