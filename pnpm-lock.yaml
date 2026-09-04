@@ -26,6 +26,9 @@ importers:
       '@langchain/core':
         specifier: ^1.2.9
         version: 1.2.9
+      '@langchain/google-genai':
+        specifier: ^2.3.0
+        version: 2.3.0(@langchain/core@1.2.9)
       '@langchain/langgraph':
         specifier: ^1.4.13
         version: 1.4.13(@langchain/core@1.2.9)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.5.4)
@@ -903,6 +906,10 @@ packages:
       '@noble/hashes':
         optional: true
 
+  '@google/generative-ai@0.24.1':
+    resolution: {integrity: sha512-MqO+MLfM6kjxcKoy0p1wRzG3b4ZZXtPI+z2IE26UogS2Cm/XHO+7gGRBh6gcJsOiIVoH93UwKvW4HdgiOZCy9Q==}
+    engines: {node: '>=18.0.0'}
+
   '@hono/node-server@1.19.17':
     resolution: {integrity: sha512-dSneS5qhiauZWGDCeK4o695Xd9nUNjviSZCMQrj10eetr8Uln1ucn6bbphOM6UynAMMtNIzZNSpL9vnASJwrPQ==}
     engines: {node: '>=18.14.1'}
@@ -937,6 +944,12 @@ packages:
   '@langchain/core@1.2.9':
     resolution: {integrity: sha512-conzSEj9Zu1AyXJLXsSbgrtxtxinmI1yGqQ5CIJZSoV5rvv+yvQE/vgBnoySpBQ/bl3YPgj2FL/gbDjWykLSfg==}
     engines: {node: '>=20'}
+
+  '@langchain/google-genai@2.3.0':
+    resolution: {integrity: sha512-i797N4UToqFZHaXLR24mhLrlODwiEIxq/pnjHDvfQcrrm/qn+YIPBoIlefN6BVUua96rxumZ4m2iQ7FG6Aa2ww==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@langchain/core': ^1.2.9
 
   '@langchain/langgraph-checkpoint@1.1.5':
     resolution: {integrity: sha512-BwDwl5VeTOh6CVuiIPgsUgfK51vTJDMSbFcSCUfjJWsl8/DPdK/mbv+ejxJstkSk/BlSPMP4JfXWcN6jD2ea2Q==}
@@ -2985,6 +2998,8 @@ snapshots:
 
   '@exodus/bytes@1.15.1': {}
 
+  '@google/generative-ai@0.24.1': {}
+
   '@hono/node-server@1.19.17(hono@4.13.5)':
     dependencies:
       hono: 4.13.5
@@ -3031,6 +3046,11 @@ snapshots:
       - '@opentelemetry/sdk-trace-base'
       - openai
       - ws
+
+  '@langchain/google-genai@2.3.0(@langchain/core@1.2.9)':
+    dependencies:
+      '@google/generative-ai': 0.24.1
+      '@langchain/core': 1.2.9
 
   '@langchain/langgraph-checkpoint@1.1.5(@langchain/core@1.2.9)':
     dependencies:

@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { logger } from "hono/logger";
+import { corsMiddleware } from "./middleware/cors.js";
 import webhooks from "./routes/webhooks.js";
 import subscriptionsRoute from "./routes/subscriptions.js";
 import eventsRoute from "./routes/events.js";
@@ -21,6 +22,7 @@ import { closeDb } from "./db/index.js";
 const app = new Hono();
 
 app.use("*", logger());
+app.use("/api/*", corsMiddleware());
 
 app.get("/health", (c) => {
   return c.json({ status: "ok", timestamp: new Date().toISOString() });

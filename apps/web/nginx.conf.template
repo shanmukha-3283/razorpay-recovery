@@ -1,5 +1,7 @@
 server {
-  listen 80;
+  # PORT is Render-assigned in production, 80 locally. The entrypoint
+  # renders this template with envsubst before nginx starts.
+  listen ${NGINX_PORT};
   server_name _;
   root /usr/share/nginx/html;
   index index.html;
@@ -10,8 +12,9 @@ server {
 
   # API reverse proxy: the frontend calls same-origin /api/*, which lands
   # here and is forwarded to the api service (backend expects the /api prefix).
+  # API_HOST/API_PORT point at the backend over the private network.
   location /api/ {
-    proxy_pass http://api:3000/api/;
+    proxy_pass http://${API_HOST}:${API_PORT}/api/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;

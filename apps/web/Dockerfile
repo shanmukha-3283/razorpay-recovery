@@ -18,8 +18,13 @@ ENV VITE_API_URL=${VITE_API_URL}
 RUN pnpm --filter @razorpay-recovery/web build
 
 # ---- Runtime: nginx serving static assets + /api reverse proxy ----
+# The entrypoint renders nginx.conf.template with API_HOST/API_PORT and
+# NGINX_PORT (Render injects PORT), so the same image works locally
+# (api:3000, :80) and on Render (private service host + assigned port).
 FROM nginx:alpine AS runtime
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY apps/web/nginx.conf.template /etc/nginx/conf.d/default.conf.template
+COPY apps/web/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 COPY --from=builder /repo/apps/web/dist /usr/share/nginx/html
 EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/docker-entrypoint.sh"]

@@ -183,3 +183,23 @@ pnpm test        # vitest unit tests (retry cap, signature verification, actions
   instead of sending.
 - Without an LLM reachable, the agent falls back to deterministic decisions so the
   pipeline still completes.
+
+## Deploying to Render
+
+`render.yaml` at the repo root defines the full stack: API (Docker, `/health`
+checks), web (Docker nginx serving the SPA + same-origin `/api` proxy),
+managed Postgres, and managed Key Value (Redis).
+
+1. Dashboard → New → Blueprint → select this repo.
+2. Fill every `sync: false` secret: Razorpay keys + webhook secret, `GOOGLE_API_KEY`
+   (with `LLM_PROVIDER=gemini` pre-set), `RESEND_API_KEY` + `DELIVERY_FROM_EMAIL`.
+3. Deploy. Run migrations once against the managed DB:
+   `DATABASE_URL=<render-postgres-url> pnpm --filter @razorpay-recovery/api db:migrate`
+4. Register the public API URL (`https://<api-service>.onrender.com/webhooks/razorpay`)
+   in the Razorpay dashboard and fire a test event.
+5. Open the web service URL — the dashboard talks to the API through the
+   nginx `/api` proxy, so no extra CORS or frontend config is needed.
+
+Caveats for evaluation use: free-tier Postgres sleeps and Key Value is
+ephemeral — fine for judging, not for production data. Set `WEB_ORIGIN` only
+if you call the API directly from another origin.

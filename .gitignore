@@ -9,4 +9,5 @@ dist
 # Local-only project notes (never commit or push these)
 PROJECT_WORKFLOW.md
 DEMO_SCRIPT.md
+EVALUATOR_GUIDE.md
 problem-statement.txt
