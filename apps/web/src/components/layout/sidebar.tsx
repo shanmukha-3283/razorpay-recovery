@@ -9,6 +9,7 @@ import {
   Moon,
   Sun,
   ShoppingCart,
+  HandCoins,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ const navItems = [
   { to: "/events", label: "Raw Events", icon: ScrollText },
   { to: "/recovery", label: "Recovery", icon: Repeat },
   { to: "/checkouts", label: "Checkouts", icon: ShoppingCart },
+  { to: "/receivables", label: "Receivables", icon: HandCoins },
   { to: "/deliveries", label: "Deliveries", icon: Mail },
   { to: "/audit", label: "Audit Ledger", icon: BadgeCheck },
 ];

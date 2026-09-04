@@ -163,4 +163,56 @@ describe("scheduleRecovery terminal guard", () => {
     });
     expect(queueAdd).toHaveBeenCalledTimes(1);
   });
+
+  it("does not schedule when the invoice is paid", async () => {
+    statusRow.value = [{ status: "paid" }];
+
+    const decision = await scheduleRecovery({
+      domain: "receivable",
+      ownerId: "inv_1",
+      amount: 50000,
+      currency: "INR",
+    });
+
+    expect(decision).toEqual({
+      allowed: false,
+      attemptNumber: 4,
+      scheduledFor: null,
+      reason: "cap_reached",
+    });
+    expect(decideRecovery).not.toHaveBeenCalled();
+    expect(inserted.values).toHaveLength(0);
+    expect(queueAdd).not.toHaveBeenCalled();
+  });
+
+  it("schedules normally for an overdue invoice with owner columns", async () => {
+    statusRow.value = [{ status: "overdue" }];
+    const scheduledFor = new Date(Date.now());
+    decideRecovery.mockResolvedValue({
+      allowed: true,
+      attemptNumber: 1,
+      scheduledFor,
+      reason: "scheduled",
+    });
+    queueAdd.mockResolvedValue({});
+
+    const decision = await scheduleRecovery({
+      domain: "receivable",
+      ownerId: "inv_1",
+      amount: 50000,
+      currency: "INR",
+    });
+
+    expect(decision.allowed).toBe(true);
+    expect(decideRecovery).toHaveBeenCalledWith("receivable", "inv_1");
+    expect(inserted.values).toHaveLength(1);
+    expect(inserted.values[0]).toMatchObject({
+      domain: "receivable",
+      domainId: "inv_1",
+      subscriptionId: null,
+      attemptNumber: 1,
+      status: "pending",
+    });
+    expect(queueAdd).toHaveBeenCalledTimes(1);
+  });
 });

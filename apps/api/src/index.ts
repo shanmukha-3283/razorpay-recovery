@@ -9,6 +9,7 @@ import auditRoute from "./routes/audit.js";
 import statsRoute from "./routes/stats.js";
 import deliveriesRoute from "./routes/deliveries.js";
 import checkoutsRoute from "./routes/checkouts.js";
+import receivablesRoute from "./routes/receivables.js";
 import { startWorker, closeWorker } from "./queue/worker.js";
 import { resetStaleAttempts } from "./queue/sweep.js";
 import { closeQueue } from "./queue/index.js";
@@ -30,6 +31,7 @@ app.route("/api/audit-ledger", auditRoute);
 app.route("/api/stats", statsRoute);
 app.route("/api/deliveries", deliveriesRoute);
 app.route("/api/checkouts", checkoutsRoute);
+app.route("/api/receivables", receivablesRoute);
 
 startWorker();
 

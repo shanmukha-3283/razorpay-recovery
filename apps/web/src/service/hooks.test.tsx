@@ -7,6 +7,10 @@ import {
   useCheckout,
   useCheckouts,
   useManualRecovery,
+  useMarkInvoicePaid,
+  useReceivable,
+  useReceivables,
+  useRecordPromise,
   useSubscription,
   useSubscriptionSync,
 } from "./hooks";
@@ -18,6 +22,10 @@ vi.mock("@/lib/api", () => ({
     recoverSubscription: vi.fn(),
     checkouts: vi.fn(),
     checkout: vi.fn(),
+    receivables: vi.fn(),
+    receivable: vi.fn(),
+    recordPromise: vi.fn(),
+    markInvoicePaid: vi.fn(),
   },
 }));
 
@@ -135,5 +143,50 @@ describe("data hooks", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual({ id: "co_1" });
     expect(mockedApi.checkout).toHaveBeenCalledWith("co_1");
+  });
+
+  it("useReceivables forwards filters and useReceivable unwraps", async () => {
+    mockedApi.receivables.mockResolvedValue({
+      data: [],
+      meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
+    } as never);
+    mockedApi.receivable.mockResolvedValue({
+      data: { id: "inv_1" },
+    } as never);
+    const { wrapper } = setup();
+
+    const list = renderHook(() => useReceivables({ status: "overdue" }), {
+      wrapper,
+    });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    expect(mockedApi.receivables).toHaveBeenCalledWith({ status: "overdue" });
+
+    const detail = renderHook(() => useReceivable("inv_1"), { wrapper });
+    await waitFor(() => expect(detail.result.current.isSuccess).toBe(true));
+    expect(detail.result.current.data).toEqual({ id: "inv_1" });
+  });
+
+  it("useRecordPromise and useMarkInvoicePaid invalidate receivable caches", async () => {
+    mockedApi.recordPromise.mockResolvedValue({ data: {} } as never);
+    mockedApi.markInvoicePaid.mockResolvedValue({ data: {} } as never);
+    const { wrapper, invalidateSpy } = setup();
+
+    const promise = renderHook(() => useRecordPromise(), { wrapper });
+    promise.result.current.mutate({
+      id: "inv_1",
+      body: { promised_date: "2026-10-01" },
+    });
+    await waitFor(() => expect(promise.result.current.isSuccess).toBe(true));
+    expect(mockedApi.recordPromise).toHaveBeenCalledWith("inv_1", {
+      promised_date: "2026-10-01",
+    });
+
+    const paid = renderHook(() => useMarkInvoicePaid(), { wrapper });
+    paid.result.current.mutate("inv_1");
+    await waitFor(() => expect(paid.result.current.isSuccess).toBe(true));
+    expect(mockedApi.markInvoicePaid).toHaveBeenCalledWith("inv_1");
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["receivable"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["receivables"] });
   });
 });

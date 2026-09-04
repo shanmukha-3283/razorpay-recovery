@@ -90,4 +90,24 @@ export const api = {
     request<{ data: import("./types").CheckoutDetail }>(
       `/checkouts/${id}`
     ),
+  receivables: (params?: Record<string, string>) => {
+    const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return request<
+      import("./types").Paginated<import("./types").ReceivableInvoice>
+    >(`/receivables${qs}`);
+  },
+  receivable: (id: string) =>
+    request<{ data: import("./types").ReceivableDetail }>(
+      `/receivables/${id}`
+    ),
+  recordPromise: (id: string, body: { promised_amount?: number; promised_date: string }) =>
+    post<{ data: { id: string; invoiceId: string; status: string } }>(
+      `/receivables/${id}/promises`,
+      body
+    ),
+  markInvoicePaid: (id: string) =>
+    post<{ data: { id: string; status: string } }>(
+      `/receivables/${id}/mark-paid`,
+      {}
+    ),
 };

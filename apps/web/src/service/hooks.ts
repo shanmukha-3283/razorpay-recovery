@@ -6,6 +6,7 @@ import {
 import { api } from "@/lib/api";
 import type {
   CheckoutDetail,
+  ReceivableDetail,
   RecoveryAttempt,
   SubscriptionDetail,
 } from "@/lib/types";
@@ -119,4 +120,56 @@ export function useCheckout(id: string) {
   });
 }
 
-export type { CheckoutDetail, RecoveryAttempt, SubscriptionDetail };
+export function useReceivables(filters?: Record<string, string>) {
+  return useQuery({
+    queryKey: ["receivables", filters],
+    queryFn: () => api.receivables(filters),
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useReceivable(id: string) {
+  return useQuery({
+    queryKey: ["receivable", id],
+    queryFn: async () => {
+      const res = await api.receivable(id);
+      return res.data satisfies ReceivableDetail;
+    },
+    enabled: !!id,
+  });
+}
+
+export function useRecordPromise() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: { promised_amount?: number; promised_date: string };
+    }) => api.recordPromise(id, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receivable"] });
+      queryClient.invalidateQueries({ queryKey: ["receivables"] });
+    },
+  });
+}
+
+export function useMarkInvoicePaid() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.markInvoicePaid(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receivable"] });
+      queryClient.invalidateQueries({ queryKey: ["receivables"] });
+    },
+  });
+}
+
+export type {
+  CheckoutDetail,
+  ReceivableDetail,
+  RecoveryAttempt,
+  SubscriptionDetail,
+};

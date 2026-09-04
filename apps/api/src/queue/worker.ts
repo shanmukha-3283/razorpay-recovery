@@ -1,19 +1,23 @@
 import { Worker, type Job } from "bullmq";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { abandonedCheckouts, auditLedger, customers, payments, recoveryAttempts, subscriptions } from "../db/schema.js";
+import { abandonedCheckouts, auditLedger, customers, payments, paymentPromises, receivableInvoices, recoveryAttempts, subscriptions } from "../db/schema.js";
 import { connection } from "./connection.js";
 import { type RecoveryJobData } from "./index.js";
 import { checkoutAgent } from "../agent/checkoutAgent.js";
+import { receivableAgent } from "../agent/receivableAgent.js";
 import { executeRecoveryAction } from "./recoveryAction.js";
 import { executeRazorpayAction } from "../razorpay/actions.js";
 import { sendRecoveryMessage } from "../delivery/index.js";
 
-const TERMINAL_ACTIONS = ["halt", "no-op", "expire", "recovered"];
+const TERMINAL_ACTIONS = ["halt", "no-op", "expire", "recovered", "paid"];
 
 export async function processRecoveryJob(job: Job<RecoveryJobData>) {
   if (job.data.domain === "checkout") {
     return processCheckoutJob(job);
+  }
+  if (job.data.domain === "receivable") {
+    return processReceivableJob(job);
   }
   return processSubscriptionJob(job);
 }
@@ -125,6 +129,131 @@ async function processCheckoutJob(job: Job<RecoveryJobData>) {
       ...details,
       reason: result.reason,
       checkout: { razorpayOrderId: checkout.razorpayOrderId },
+      ...(delivery
+        ? {
+            delivery: {
+              channel: delivery.channel,
+              status: delivery.status,
+              error: delivery.error ?? null,
+            },
+          }
+        : null),
+    },
+  });
+}
+
+async function markPromiseStatus(promiseId: string, status: string) {
+  await db
+    .update(paymentPromises)
+    .set({ status })
+    .where(eq(paymentPromises.id, promiseId));
+}
+
+async function processReceivableJob(job: Job<RecoveryJobData>) {
+  const { ownerId: invoiceId, attemptNumber, amount } = job.data;
+
+  // Same claim guard as the other domains: only pending attempts run.
+  const [attempt] = await db
+    .update(recoveryAttempts)
+    .set({ status: "in_progress" })
+    .where(
+      and(
+        eq(recoveryAttempts.id, job.id ?? ""),
+        eq(recoveryAttempts.status, "pending")
+      )
+    )
+    .returning({ id: recoveryAttempts.id });
+
+  if (!attempt) {
+    console.log(`Recovery job ${job.id} already handled; skipping.`);
+    return;
+  }
+
+  const attemptId = attempt.id;
+
+  const [invoice] = await db
+    .select()
+    .from(receivableInvoices)
+    .where(eq(receivableInvoices.id, invoiceId));
+
+  if (!invoice) {
+    await db
+      .update(recoveryAttempts)
+      .set({
+        status: "completed",
+        action: "no-op",
+        details: { reason: "invoice not found" },
+      })
+      .where(eq(recoveryAttempts.id, attemptId));
+    await db.insert(auditLedger).values({
+      recoveryAttemptId: attemptId,
+      action: "no-op",
+      amount,
+      metadata: { reason: "invoice not found" },
+    });
+    return;
+  }
+
+  const result = await receivableAgent.invoke({
+    invoiceId,
+    attemptNumber,
+    amount,
+    currency: job.data.currency,
+  });
+
+  const decision = result.decision ?? "no-op";
+  const details = (result.details ?? {}) as Record<string, unknown>;
+  const draftedMessage =
+    typeof details.message === "string" ? details.message : null;
+
+  // Apply local state transitions so the dashboard stays accurate.
+  if (decision === "paid") {
+    await db
+      .update(receivableInvoices)
+      .set({ status: "paid", updatedAt: new Date() })
+      .where(eq(receivableInvoices.id, invoiceId));
+  } else if (decision === "breach") {
+    await db
+      .update(receivableInvoices)
+      .set({ status: "breached", updatedAt: new Date() })
+      .where(eq(receivableInvoices.id, invoiceId));
+    if (typeof details.promiseId === "string") {
+      await markPromiseStatus(details.promiseId, "breached");
+    }
+  }
+
+  await db
+    .update(recoveryAttempts)
+    .set({
+      status: "completed",
+      action: decision,
+      details: { reason: result.reason, ...(result.details ?? {}) },
+    })
+    .where(eq(recoveryAttempts.id, attemptId));
+
+  let delivery: Awaited<ReturnType<typeof sendRecoveryMessage>> | null = null;
+  if (
+    draftedMessage &&
+    (decision === "remind" || decision === "escalate" || decision === "breach") &&
+    invoice.customerEmail
+  ) {
+    delivery = await sendRecoveryMessage({
+      domain: "receivable",
+      ownerId: invoiceId,
+      recoveryAttemptId: attemptId,
+      toEmail: invoice.customerEmail,
+      message: details.message as string,
+    });
+  }
+
+  await db.insert(auditLedger).values({
+    recoveryAttemptId: attemptId,
+    action: decision,
+    amount,
+    metadata: {
+      ...details,
+      reason: result.reason,
+      invoice: { externalId: invoice.externalId },
       ...(delivery
         ? {
             delivery: {

@@ -152,6 +152,58 @@ async function seed() {
     }
   }
 
+  // Demo receivable invoices (Track B): one per aging band + promised + paid.
+  await sql`
+    insert into receivable_invoices (external_id, customer_name, customer_email, amount, currency, due_date, status)
+    values
+      ('seed-INV-001', 'Acme Corp', 'ap@acme.example.com', 250000, 'INR', now() - interval '3 days', 'overdue'),
+      ('seed-INV-002', 'Globex Ltd', 'billing@globex.example.com', 480000, 'INR', now() - interval '12 days', 'overdue'),
+      ('seed-INV-003', 'Initech', 'accounts@initech.example.com', 120000, 'INR', now() - interval '25 days', 'overdue'),
+      ('seed-INV-004', 'Umbrella Co', 'finance@umbrella.example.com', 310000, 'INR', now() - interval '9 days', 'promised'),
+      ('seed-INV-005', 'Hooli', 'pay@hooli.example.com', 95000, 'INR', now() - interval '15 days', 'paid')
+    on conflict (external_id) do nothing
+  `;
+
+  const [promisedInv] = await sql`
+    select id from receivable_invoices where external_id = 'seed-INV-004'
+  `;
+  if (promisedInv) {
+    const [existingPromise] = await sql`
+      select id from payment_promises where invoice_id = ${promisedInv.id} and status = 'open'
+    `;
+    if (!existingPromise) {
+      await sql`
+        insert into payment_promises (invoice_id, promised_amount, promised_date, status)
+        values (${promisedInv.id}, 310000, now() + interval '5 days', 'open')
+      `;
+    }
+  }
+
+  const [bandInv] = await sql`
+    select id from receivable_invoices where external_id = 'seed-INV-002'
+  `;
+  if (bandInv) {
+    const [existingTouch] = await sql`
+      select id from recovery_attempts
+      where domain = 'receivable' and domain_id = ${bandInv.id} and attempt_number = 1
+    `;
+    if (!existingTouch) {
+      const [touch] = await sql`
+        insert into recovery_attempts (domain, domain_id, subscription_id, attempt_number, action, status, amount, details, next_attempt_at)
+        values ('receivable', ${bandInv.id}, null, 1, 'remind', 'completed', 480000, '{"reason":"polite first reminder"}', now() + interval '7 days')
+        returning id
+      `;
+      await sql`
+        insert into message_deliveries (domain, domain_id, subscription_id, recovery_attempt_id, channel, to_email, status, provider_message_id, message_body, sent_at)
+        values ('receivable', ${bandInv.id}, null, ${touch.id}, 'email', 'billing@globex.example.com', 'sent', 'seed_inv_msg_1', 'Friendly reminder: invoice seed-INV-002 is overdue.', now() - interval '1 day')
+      `;
+      await sql`
+        insert into audit_ledger (recovery_attempt_id, action, amount, metadata)
+        values (${touch.id}, 'remind', 480000, '{"domain":"receivable","note":"first dunning touch"}')
+      `;
+    }
+  }
+
   await sql.end();
 }
 

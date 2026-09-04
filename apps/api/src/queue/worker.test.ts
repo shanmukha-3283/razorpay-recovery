@@ -8,6 +8,7 @@ const executeRecoveryAction = vi.hoisted(() => vi.fn());
 const executeRazorpayAction = vi.hoisted(() => vi.fn());
 const sendRecoveryMessage = vi.hoisted(() => vi.fn());
 const checkoutInvoke = vi.hoisted(() => vi.fn());
+const receivableInvoke = vi.hoisted(() => vi.fn());
 
 vi.mock("../db/index.js", () => ({
   db: {
@@ -51,6 +52,9 @@ vi.mock("./recoveryAction.js", () => ({ executeRecoveryAction }));
 vi.mock("../razorpay/actions.js", () => ({ executeRazorpayAction }));
 vi.mock("../agent/checkoutAgent.js", () => ({
   checkoutAgent: { invoke: checkoutInvoke },
+}));
+vi.mock("../agent/receivableAgent.js", () => ({
+  receivableAgent: { invoke: receivableInvoke },
 }));
 vi.mock("../delivery/index.js", () => ({ sendRecoveryMessage }));
 
@@ -267,6 +271,106 @@ describe("processRecoveryJob / checkout domain", () => {
     await processRecoveryJob(checkoutJob());
 
     expect(checkoutInvoke).not.toHaveBeenCalled();
+    const attemptUpdate = updateSets.values.find(
+      (s) => "action" in s && s.action === "no-op"
+    );
+    expect(attemptUpdate).toMatchObject({ status: "completed" });
+  });
+});
+
+describe("processRecoveryJob / receivable domain", () => {
+  function receivableJob() {
+    return {
+      id: "attempt_inv_1",
+      data: {
+        domain: "receivable",
+        ownerId: "inv_1",
+        attemptNumber: 1,
+        amount: 50000,
+        currency: "INR",
+      },
+    } as any;
+  }
+
+  function invoiceRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "inv_1",
+      externalId: "INV-001",
+      customerEmail: "ap@example.com",
+      status: "overdue",
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    selectRows.queue = [];
+    updateSets.values = [];
+    updateReturning.queue = [];
+    inserted.values = [];
+    receivableInvoke.mockReset();
+    sendRecoveryMessage.mockReset();
+    sendRecoveryMessage.mockResolvedValue({ status: "sent", channel: "email" });
+  });
+
+  it("sends a band-toned reminder and completes", async () => {
+    updateReturning.queue = [[{ id: "attempt_inv_1" }]];
+    selectRows.queue = [[invoiceRow()]];
+    receivableInvoke.mockResolvedValue({
+      decision: "remind",
+      reason: "polite first reminder",
+      details: { message: "Please pay.", daysOverdue: 5 },
+    });
+
+    await processRecoveryJob(receivableJob());
+
+    const attemptUpdate = updateSets.values.find(
+      (s) => "action" in s && s.action === "remind"
+    );
+    expect(attemptUpdate).toMatchObject({ status: "completed" });
+    expect(sendRecoveryMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: "receivable",
+        ownerId: "inv_1",
+        recoveryAttemptId: "attempt_inv_1",
+        toEmail: "ap@example.com",
+      })
+    );
+    expect(
+      inserted.values.find((v) => v.recoveryAttemptId === "attempt_inv_1")
+    ).toMatchObject({ action: "remind", amount: 50000 });
+  });
+
+  it("marks a breached promise and the invoice on breach", async () => {
+    updateReturning.queue = [[{ id: "attempt_inv_1" }]];
+    selectRows.queue = [[invoiceRow()]];
+    receivableInvoke.mockResolvedValue({
+      decision: "breach",
+      reason: "promise breached",
+      details: { message: "Pay now.", promiseId: "prom_1" },
+    });
+
+    await processRecoveryJob(receivableJob());
+
+    expect(
+      updateSets.values.find((s) => s.status === "breached")
+    ).toBeDefined();
+    // The promise flip carries no updatedAt (invoice update does).
+    expect(
+      updateSets.values.find(
+        (s) => s.status === "breached" && !("updatedAt" in s)
+      )
+    ).toBeDefined();
+    // Promise flip targets the promise id specifically.
+    expect(sendRecoveryMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("records no-op when the invoice row is gone", async () => {
+    updateReturning.queue = [[{ id: "attempt_inv_1" }]];
+    selectRows.queue = [[]];
+
+    await processRecoveryJob(receivableJob());
+
+    expect(receivableInvoke).not.toHaveBeenCalled();
     const attemptUpdate = updateSets.values.find(
       (s) => "action" in s && s.action === "no-op"
     );

@@ -14,9 +14,11 @@ import { Route as AuditRouteImport } from './routes/audit'
 import { Route as CheckoutsRouteImport } from './routes/checkouts'
 import { Route as DeliveriesRouteImport } from './routes/deliveries'
 import { Route as EventsRouteImport } from './routes/events'
+import { Route as ReceivablesRouteImport } from './routes/receivables'
 import { Route as RecoveryRouteImport } from './routes/recovery'
 import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
 import { Route as CheckoutsIdRouteImport } from './routes/checkouts.$id'
+import { Route as ReceivablesIdRouteImport } from './routes/receivables.$id'
 import { Route as SubscriptionsIdRouteImport } from './routes/subscriptions.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -44,6 +46,11 @@ const EventsRoute = EventsRouteImport.update({
   path: '/events',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReceivablesRoute = ReceivablesRouteImport.update({
+  id: '/receivables',
+  path: '/receivables',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RecoveryRoute = RecoveryRouteImport.update({
   id: '/recovery',
   path: '/recovery',
@@ -59,6 +66,11 @@ const CheckoutsIdRoute = CheckoutsIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => CheckoutsRoute,
 } as any)
+const ReceivablesIdRoute = ReceivablesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ReceivablesRoute,
+} as any)
 const SubscriptionsIdRoute = SubscriptionsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -71,9 +83,11 @@ export interface FileRoutesByFullPath {
   '/checkouts': typeof CheckoutsRouteWithChildren
   '/deliveries': typeof DeliveriesRoute
   '/events': typeof EventsRoute
+  '/receivables': typeof ReceivablesRouteWithChildren
   '/recovery': typeof RecoveryRoute
   '/subscriptions': typeof SubscriptionsRouteWithChildren
   '/checkouts/$id': typeof CheckoutsIdRoute
+  '/receivables/$id': typeof ReceivablesIdRoute
   '/subscriptions/$id': typeof SubscriptionsIdRoute
 }
 export interface FileRoutesByTo {
@@ -82,9 +96,11 @@ export interface FileRoutesByTo {
   '/checkouts': typeof CheckoutsRouteWithChildren
   '/deliveries': typeof DeliveriesRoute
   '/events': typeof EventsRoute
+  '/receivables': typeof ReceivablesRouteWithChildren
   '/recovery': typeof RecoveryRoute
   '/subscriptions': typeof SubscriptionsRouteWithChildren
   '/checkouts/$id': typeof CheckoutsIdRoute
+  '/receivables/$id': typeof ReceivablesIdRoute
   '/subscriptions/$id': typeof SubscriptionsIdRoute
 }
 export interface FileRoutesById {
@@ -94,9 +110,11 @@ export interface FileRoutesById {
   '/checkouts': typeof CheckoutsRouteWithChildren
   '/deliveries': typeof DeliveriesRoute
   '/events': typeof EventsRoute
+  '/receivables': typeof ReceivablesRouteWithChildren
   '/recovery': typeof RecoveryRoute
   '/subscriptions': typeof SubscriptionsRouteWithChildren
   '/checkouts/$id': typeof CheckoutsIdRoute
+  '/receivables/$id': typeof ReceivablesIdRoute
   '/subscriptions/$id': typeof SubscriptionsIdRoute
 }
 export interface FileRouteTypes {
@@ -107,9 +125,11 @@ export interface FileRouteTypes {
     | '/checkouts'
     | '/deliveries'
     | '/events'
+    | '/receivables'
     | '/recovery'
     | '/subscriptions'
     | '/checkouts/$id'
+    | '/receivables/$id'
     | '/subscriptions/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -118,9 +138,11 @@ export interface FileRouteTypes {
     | '/checkouts'
     | '/deliveries'
     | '/events'
+    | '/receivables'
     | '/recovery'
     | '/subscriptions'
     | '/checkouts/$id'
+    | '/receivables/$id'
     | '/subscriptions/$id'
   id:
     | '__root__'
@@ -129,9 +151,11 @@ export interface FileRouteTypes {
     | '/checkouts'
     | '/deliveries'
     | '/events'
+    | '/receivables'
     | '/recovery'
     | '/subscriptions'
     | '/checkouts/$id'
+    | '/receivables/$id'
     | '/subscriptions/$id'
   fileRoutesById: FileRoutesById
 }
@@ -141,6 +165,7 @@ export interface RootRouteChildren {
   CheckoutsRoute: typeof CheckoutsRouteWithChildren
   DeliveriesRoute: typeof DeliveriesRoute
   EventsRoute: typeof EventsRoute
+  ReceivablesRoute: typeof ReceivablesRouteWithChildren
   RecoveryRoute: typeof RecoveryRoute
   SubscriptionsRoute: typeof SubscriptionsRouteWithChildren
 }
@@ -182,6 +207,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EventsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/receivables': {
+      id: '/receivables'
+      path: '/receivables'
+      fullPath: '/receivables'
+      preLoaderRoute: typeof ReceivablesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/recovery': {
       id: '/recovery'
       path: '/recovery'
@@ -202,6 +234,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/checkouts/$id'
       preLoaderRoute: typeof CheckoutsIdRouteImport
       parentRoute: typeof CheckoutsRoute
+    }
+    '/receivables/$id': {
+      id: '/receivables/$id'
+      path: '/$id'
+      fullPath: '/receivables/$id'
+      preLoaderRoute: typeof ReceivablesIdRouteImport
+      parentRoute: typeof ReceivablesRoute
     }
     '/subscriptions/$id': {
       id: '/subscriptions/$id'
@@ -225,6 +264,18 @@ const CheckoutsRouteWithChildren = CheckoutsRoute._addFileChildren(
   CheckoutsRouteChildren,
 )
 
+interface ReceivablesRouteChildren {
+  ReceivablesIdRoute: typeof ReceivablesIdRoute
+}
+
+const ReceivablesRouteChildren: ReceivablesRouteChildren = {
+  ReceivablesIdRoute: ReceivablesIdRoute,
+}
+
+const ReceivablesRouteWithChildren = ReceivablesRoute._addFileChildren(
+  ReceivablesRouteChildren,
+)
+
 interface SubscriptionsRouteChildren {
   SubscriptionsIdRoute: typeof SubscriptionsIdRoute
 }
@@ -243,6 +294,7 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutsRoute: CheckoutsRouteWithChildren,
   DeliveriesRoute: DeliveriesRoute,
   EventsRoute: EventsRoute,
+  ReceivablesRoute: ReceivablesRouteWithChildren,
   RecoveryRoute: RecoveryRoute,
   SubscriptionsRoute: SubscriptionsRouteWithChildren,
 }

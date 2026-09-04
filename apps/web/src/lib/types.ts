@@ -76,6 +76,32 @@ export type CheckoutDetail = Checkout & {
   recoveryAttempts: RecoveryAttempt[];
 };
 
+export type PaymentPromise = {
+  id: string;
+  promisedAmount: number | null;
+  promisedDate: string;
+  status: string;
+  createdAt: string;
+};
+
+export type ReceivableInvoice = {
+  id: string;
+  externalId: string;
+  customerName: string | null;
+  customerEmail: string | null;
+  amount: number;
+  currency: string | null;
+  dueDate: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ReceivableDetail = ReceivableInvoice & {
+  promises: PaymentPromise[];
+  recoveryAttempts: RecoveryAttempt[];
+};
+
 export type SubscriptionDetail = Subscription & {
   customerContact: string | null;
   payments: Payment[];

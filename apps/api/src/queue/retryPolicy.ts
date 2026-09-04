@@ -2,7 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { recoveryAttempts } from "../db/schema.js";
 
-export type RecoveryDomain = "subscription" | "checkout";
+export type RecoveryDomain = "subscription" | "checkout" | "receivable";
 
 type DomainPolicy = {
   maxAttempts: number;
@@ -18,6 +18,13 @@ const POLICIES: Record<RecoveryDomain, DomainPolicy> = {
   // Bounded checkout recovery: max 2 reminders / 48h. The first reminder is
   // delayed 30 minutes to give the customer a grace window to pay.
   checkout: { maxAttempts: 2, windowHours: 48, spacingMs: [30 * 60 * 1000, 24 * HOUR] },
+  // Bounded receivables chasing: max 4 touches / 30d, spaced weekly after
+  // the first immediate touch.
+  receivable: {
+    maxAttempts: 4,
+    windowHours: 30 * 24,
+    spacingMs: [0, 7 * 24 * HOUR, 7 * 24 * HOUR, 7 * 24 * HOUR],
+  },
 };
 
 // Kept for backward compatibility (subscription policy). graph.ts uses

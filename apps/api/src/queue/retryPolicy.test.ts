@@ -166,3 +166,46 @@ describe("decideRecovery / checkout policy (2 reminders / 48h)", () => {
     );
   });
 });
+
+describe("decideRecovery / receivable policy (4 touches / 30d)", () => {
+  beforeEach(() => {
+    attemptsForQuery.mockReset();
+  });
+
+  it("schedules the first touch immediately", async () => {
+    attemptsForQuery.mockReturnValue([]);
+    const before = Date.now();
+    const decision = await decideRecovery("receivable", "inv_1");
+
+    expect(decision.allowed).toBe(true);
+    expect(decision.attemptNumber).toBe(1);
+    expect(decision.scheduledFor!.getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it("spaces later touches weekly", async () => {
+    const t1 = new Date("2026-09-01T00:00:00Z");
+    attemptsForQuery.mockReturnValue([makeAttempt(1, t1)]);
+
+    const decision = await decideRecovery("receivable", "inv_1");
+    expect(decision.allowed).toBe(true);
+    expect(decision.attemptNumber).toBe(2);
+    expect(decision.scheduledFor!.getTime()).toBe(
+      t1.getTime() + 7 * 24 * 60 * 60 * 1000
+    );
+  });
+
+  it("caps touches after 4 completed attempts", async () => {
+    const t1 = new Date("2026-09-01T00:00:00Z");
+    attemptsForQuery.mockReturnValue([
+      makeAttempt(4, new Date("2026-09-03T00:00:00Z")),
+      makeAttempt(3, new Date("2026-09-02T00:00:00Z")),
+      makeAttempt(2, new Date("2026-09-01T12:00:00Z")),
+      makeAttempt(1, t1),
+    ]);
+
+    const decision = await decideRecovery("receivable", "inv_1");
+    expect(decision.allowed).toBe(false);
+    expect(decision.attemptNumber).toBe(4);
+    expect(decision.reason).toBe("cap_reached");
+  });
+});

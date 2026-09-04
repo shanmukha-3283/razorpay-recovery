@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   abandonedCheckouts,
+  receivableInvoices,
   recoveryAttempts,
   subscriptions,
 } from "../db/schema.js";
@@ -22,6 +23,7 @@ export type ScheduleInput = {
 };
 
 const TERMINAL_CHECKOUT_STATUSES = ["recovered", "expired"];
+const TERMINAL_RECEIVABLE_STATUSES = ["paid", "breached-closed"];
 
 export async function scheduleRecovery(
   input: ScheduleInput
@@ -64,6 +66,23 @@ export async function scheduleRecovery(
     }
   }
 
+  if (domain === "receivable") {
+    // Terminal guard: paid/closed invoices never re-arm.
+    const [invoice] = await db
+      .select({ status: receivableInvoices.status })
+      .from(receivableInvoices)
+      .where(eq(receivableInvoices.id, ownerId));
+
+    if (invoice && TERMINAL_RECEIVABLE_STATUSES.includes(invoice.status)) {
+      return {
+        allowed: false,
+        attemptNumber: 4,
+        scheduledFor: null,
+        reason: "cap_reached",
+      };
+    }
+  }
+
   const decision = await decideRecovery(domain, ownerId);
 
   if (!decision.allowed || !decision.scheduledFor) {
@@ -72,11 +91,16 @@ export async function scheduleRecovery(
         .update(subscriptions)
         .set({ status: "halted", updatedAt: new Date() })
         .where(eq(subscriptions.id, ownerId));
-    } else {
+    } else if (domain === "checkout") {
       await db
         .update(abandonedCheckouts)
         .set({ status: "expired", updatedAt: new Date() })
         .where(eq(abandonedCheckouts.id, ownerId));
+    } else {
+      await db
+        .update(receivableInvoices)
+        .set({ status: "breached-closed", updatedAt: new Date() })
+        .where(eq(receivableInvoices.id, ownerId));
     }
     return decision;
   }

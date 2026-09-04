@@ -6,6 +6,7 @@ import {
   timestamp,
   integer,
   text,
+  index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
@@ -159,6 +160,46 @@ export const abandonedCheckouts = pgTable(
   (table) => ({
     razorpayOrderIdIdx: uniqueIndex("abandoned_checkout_order_id_idx").on(
       table.razorpayOrderId
+    ),
+  })
+);
+
+export const receivableInvoices = pgTable(
+  "receivable_invoices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    externalId: varchar("external_id", { length: 100 }).notNull(),
+    customerName: varchar("customer_name", { length: 255 }),
+    customerEmail: varchar("customer_email", { length: 255 }),
+    amount: integer("amount").notNull(),
+    currency: varchar("currency", { length: 10 }).default("INR"),
+    dueDate: timestamp("due_date"),
+    status: varchar("status", { length: 50 }).default("overdue").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    externalIdIdx: uniqueIndex("receivable_invoice_external_id_idx").on(
+      table.externalId
+    ),
+  })
+);
+
+export const paymentPromises = pgTable(
+  "payment_promises",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    invoiceId: uuid("invoice_id")
+      .references(() => receivableInvoices.id)
+      .notNull(),
+    promisedAmount: integer("promised_amount"),
+    promisedDate: timestamp("promised_date").notNull(),
+    status: varchar("status", { length: 50 }).default("open").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    invoiceIdIdx: index("payment_promise_invoice_id_idx").on(
+      table.invoiceId
     ),
   })
 );

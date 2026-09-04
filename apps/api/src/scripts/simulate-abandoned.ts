@@ -1,5 +1,7 @@
 process.loadEnvFile?.("../../.env");
 
+export {};
+
 const API_URL = process.env.API_URL ?? "http://localhost:3000/api";
 
 const orderId = process.argv[2] ?? `order_sim_${Date.now()}`;

@@ -75,6 +75,34 @@ describe("api client", () => {
     expect(fetchFn).toHaveBeenCalledWith("/api/checkouts/co_1");
   });
 
+  it("GETs receivables list with filters", async () => {
+    const fetchFn = mockFetchOnce({ data: [], meta: {} });
+    await api.receivables({ page: "1", status: "overdue" });
+    const url = fetchFn.mock.calls[0][0];
+    expect(url.startsWith("/api/receivables?")).toBe(true);
+    expect(url).toContain("status=overdue");
+  });
+
+  it("GETs a single receivable by id", async () => {
+    const fetchFn = mockFetchOnce({ data: {} });
+    await api.receivable("inv_1");
+    expect(fetchFn).toHaveBeenCalledWith("/api/receivables/inv_1");
+  });
+
+  it("POSTs promise record and mark-paid", async () => {
+    const fetchFn = mockFetchOnce({ data: {} });
+    await api.recordPromise("inv_1", { promised_date: "2026-10-01" });
+    expect(fetchFn).toHaveBeenCalledWith(
+      "/api/receivables/inv_1/promises",
+      expect.objectContaining({ method: "POST" })
+    );
+    await api.markInvoicePaid("inv_1");
+    expect(fetchFn).toHaveBeenCalledWith(
+      "/api/receivables/inv_1/mark-paid",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
   it("throws on non-OK responses", async () => {
     mockFetchOnce({}, false, 500);
     await expect(api.stats()).rejects.toThrow("API error 500");
