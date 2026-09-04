@@ -27,5 +27,38 @@ services:
       timeout: 3s
       retries: 10
 
+  api:
+    build: ./apps/api
+    container_name: razorpay-recovery-api
+    env_file: .env
+    environment:
+      # Container networking requires service names; these override any
+      # localhost-based values from .env so the app stack works as one unit.
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/razorpay_recovery
+      REDIS_URL: redis://redis:6379
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: ./apps/web
+    container_name: razorpay-recovery-web
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
 volumes:
   razorpay_db_data:

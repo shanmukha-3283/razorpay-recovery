@@ -59,6 +59,35 @@ pnpm dev
 
 Open `http://localhost:5173` for the dashboard.
 
+## Production (Docker)
+
+```bash
+# 1. Create env from the template and set real secrets
+cp .env.example .env
+
+# 2. Build + start the full stack (db, redis, api, web)
+docker compose up -d --build
+
+# 3. Apply migrations from the host (prod image has no devDeps,
+#    so drizzle-kit runs here with DATABASE_URL pointed at the compose db)
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/razorpay_recovery \
+  pnpm --filter @razorpay-recovery/api db:migrate
+```
+
+Open `http://localhost:8080` for the dashboard (nginx serves the app and
+proxies `/api/*` to the api service).
+
+Notes:
+
+- Inside compose, `DATABASE_URL`/`REDIS_URL` are overridden to the `db`/`redis`
+  service names automatically; your `.env` localhost values only apply to
+  host-run processes.
+- `VITE_API_URL` is baked at web **build** time. Leave it unset (default `/api`)
+  for the compose setup; pass `--build-arg VITE_API_URL=https://<host>/api`
+  only when the frontend is served from a different origin than the API.
+- CI (`.github/workflows/ci.yml`) runs `test` / `typecheck` / `build` plus a
+  `docker build` smoke step on every push and PR.
+
 ## Simulating a webhook locally
 
 Without real Razorpay, POST a signed `payment.failed` event to the running API:
