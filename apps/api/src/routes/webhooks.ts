@@ -25,7 +25,27 @@ webhooks.post("/razorpay", razorpayWebhook, async (c) => {
       razorpayEventId: (event.id as string) || null,
       payload,
     })
+    .onConflictDoNothing({ target: rawEvents.razorpayEventId })
     .returning({ id: rawEvents.id });
+
+  // Idempotency: Razorpay redelivers webhooks, and replays must not
+  // re-process (which would double-schedule recovery). On a duplicate
+  // event id, acknowledge without dispatching.
+  if (!rawEvent) {
+    const razorpayEventId = (event.id as string) || null;
+    if (razorpayEventId) {
+      const [existing] = await db
+        .select({ id: rawEvents.id })
+        .from(rawEvents)
+        .where(eq(rawEvents.razorpayEventId, razorpayEventId));
+      if (existing) {
+        return c.json({ received: true, duplicate: true }, 200);
+      }
+    }
+    // No row and no pre-existing match (e.g. null event id race):
+    // fall through and acknowledge without processing.
+    return c.json({ received: true }, 200);
+  }
 
   let handledSuccessfully = false;
   try {
