@@ -61,10 +61,11 @@ services:
           name: razorpay-recovery-api
           property: port
 
+  - type: keyvalue
+    name: razorpay-recovery-redis
+    plan: free
+
 databases:
   - name: razorpay-recovery-db
     databaseName: razorpay_recovery
-    plan: free
-
-  - name: razorpay-recovery-redis
     plan: free
