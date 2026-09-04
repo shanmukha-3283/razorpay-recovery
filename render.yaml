@@ -64,6 +64,7 @@ services:
   - type: keyvalue
     name: razorpay-recovery-redis
     plan: free
+    ipAllowList: []
 
 databases:
   - name: razorpay-recovery-db
