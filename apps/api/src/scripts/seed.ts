@@ -1,0 +1,118 @@
+import postgres from "postgres";
+
+process.loadEnvFile?.("../../.env");
+
+const DATABASE_URL =
+  process.env.DATABASE_URL ??
+  "postgresql://postgres:postgres@localhost:5432/razorpay_recovery";
+
+const sql = postgres(DATABASE_URL, { max: 1 });
+
+async function resetSeed() {
+  // Remove previously seeded rows so the script is idempotent.
+  const seededCustomers = await sql`select id from customers where razorpay_customer_id like 'seed_%'`;
+  const customerIds = seededCustomers.map((c) => c.id);
+
+  if (customerIds.length > 0) {
+    await sql`delete from message_deliveries where subscription_id in (select id from subscriptions where customer_id in ${sql(customerIds)})`;
+    await sql`delete from audit_ledger where recovery_attempt_id in (select a.id from recovery_attempts a join subscriptions s on a.subscription_id = s.id where s.customer_id in ${sql(customerIds)})`;
+    await sql`delete from recovery_attempts where subscription_id in (select id from subscriptions where customer_id in ${sql(customerIds)})`;
+    await sql`delete from payments where subscription_id in (select id from subscriptions where customer_id in ${sql(customerIds)})`;
+    await sql`delete from raw_events where id in (select id from raw_events where event_type like 'seed_%')`;
+    await sql`delete from subscriptions where customer_id in ${sql(customerIds)}`;
+    await sql`delete from customers where id in ${sql(customerIds)}`;
+  }
+}
+
+async function seed() {
+  await resetSeed();
+
+  const [c1] = await sql`
+    insert into customers (razorpay_customer_id, email, contact)
+    values ('seed_cus_ashish', 'ashish@example.com', '+919000000001')
+    returning id
+  `;
+  const [c2] = await sql`
+    insert into customers (razorpay_customer_id, email, contact)
+    values ('seed_cus_priya', 'priya@example.com', '+919000000002')
+    on conflict (razorpay_customer_id) do nothing
+    returning id
+  `;
+  const [c3] = await sql`
+    insert into customers (razorpay_customer_id, email, contact)
+    values ('seed_cus_rohan', 'rohan@example.com', '+919000000003')
+    on conflict (razorpay_customer_id) do nothing
+    returning id
+  `;
+
+  const planId = "plan_seed_monthly";
+
+  // Sub 1: active, healthy-ish (1 failed payment but still active)
+  const [s1] = await sql`
+    insert into subscriptions (razorpay_subscription_id, customer_id, plan_id, status, current_start, current_end, paid_count, total_count)
+    values ('seed_sub_active', ${c1.id}, ${planId}, 'active', now(), now() + interval '30 days', 2, 4)
+    on conflict (razorpay_subscription_id) do nothing
+    returning id
+  `;
+
+  // Sub 2: pending (a fresh payment.failed → retry target)
+  const [s2] = await sql`
+    insert into subscriptions (razorpay_subscription_id, customer_id, plan_id, status, current_start, current_end, paid_count, total_count)
+    values ('seed_sub_pending', ${c2.id}, ${planId}, 'pending', now(), now() + interval '30 days', 0, 3)
+    on conflict (razorpay_subscription_id) do nothing
+    returning id
+  `;
+
+  // Sub 3: halted (has hit the retry cap - demonstrates terminal handling)
+  const [s3] = await sql`
+    insert into subscriptions (razorpay_subscription_id, customer_id, plan_id, status, current_start, current_end, paid_count, total_count)
+    values ('seed_sub_halted', ${c3.id}, ${planId}, 'halted', now() - interval '5 days', now() + interval '25 days', 1, 6)
+    on conflict (razorpay_subscription_id) do nothing
+    returning id
+  `;
+
+  // Payments for each subscription.
+  await sql`
+    insert into payments (razorpay_payment_id, subscription_id, order_id, invoice_id, amount, currency, status, method, error_code, error_description)
+    values
+      ('seed_pay_1', ${s1.id}, 'seed_ord_1', null, 19900, 'INR', 'captured', 'card', null, null),
+      ('seed_pay_2', ${s1.id}, 'seed_ord_2', null, 19900, 'INR', 'failed', 'upi', 'BAD_UPI_HANDLE', 'Invalid UPI handle'),
+      ('seed_pay_3', ${s2.id}, 'seed_ord_3', 'seed_inv_1', 24900, 'INR', 'failed', 'card', 'CARD_DECLINED', 'Card was declined'),
+      ('seed_pay_4', ${s3.id}, 'seed_ord_4', null, 19900, 'INR', 'failed', 'card', 'AUTH_FAILED', 'Authentication failed')
+    on conflict (razorpay_payment_id) do nothing
+  `;
+
+  // Historical recovery attempts + audit ledger for sub 3 (halted - reached cap)
+  const [r1] = await sql`
+    insert into recovery_attempts (subscription_id, attempt_number, action, status, amount, details, next_attempt_at)
+    values (${s3.id}, 1, 'retry', 'completed', 19900, '{"reason":"CARD_DECLINED","note":"first retry"}', now() - interval '1 hour')
+    returning id
+  `;
+  const [r2] = await sql`
+    insert into recovery_attempts (subscription_id, attempt_number, action, status, amount, details, next_attempt_at)
+    values (${s3.id}, 2, 'retry', 'completed', 19900, '{"reason":"CARD_DECLINED","note":"second retry"}', now() - interval '24 hours')
+    returning id
+  `;
+  const [r3] = await sql`
+    insert into recovery_attempts (subscription_id, attempt_number, action, status, amount, details, next_attempt_at)
+    values (${s3.id}, 3, 'halt', 'completed', 19900, '{"reason":"cap_reached","note":"max attempts reached"}', null)
+    returning id
+  `;
+
+  await sql`
+    insert into audit_ledger (recovery_attempt_id, action, amount, metadata) values
+      (${r1.id}, 'retry', 19900, '{"attempt":1,"note":"first retry"}'),
+      (${r2.id}, 'retry', 19900, '{"attempt":2,"note":"second retry"}'),
+      (${r3.id}, 'halt', 19900, '{"attempt":3,"note":"max attempts reached"}')
+  `;
+
+  console.log("Seed complete.");
+  console.log(`  subscriptions: ${s1.id}, ${s2.id}, ${s3.id}`);
+
+  await sql.end();
+}
+
+seed().catch((err) => {
+  console.error("Seeding failed:", err);
+  process.exit(1);
+});

@@ -13,7 +13,10 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "db:seed": "tsx src/scripts/seed.ts",
+    "db:setup": "pnpm db:migrate && pnpm db:seed",
+    "simulate:failed": "tsx src/scripts/simulate-webhook.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.12.0",
