@@ -66,7 +66,12 @@ describe("POST /api/subscriptions/:id/recover", () => {
     const res = await postRecover(makeApp(), "sub_1");
 
     expect(res.status).toBe(200);
-    expect(scheduleRecovery).toHaveBeenCalledWith("sub_1", 24900, "INR");
+    expect(scheduleRecovery).toHaveBeenCalledWith({
+      domain: "subscription",
+      ownerId: "sub_1",
+      amount: 24900,
+      currency: "INR",
+    });
     const json = (await res.json()) as any;
     expect(json.data).toMatchObject({
       scheduled: true,
@@ -87,7 +92,12 @@ describe("POST /api/subscriptions/:id/recover", () => {
     const res = await postRecover(makeApp(), "sub_1");
 
     expect(res.status).toBe(200);
-    expect(scheduleRecovery).toHaveBeenCalledWith("sub_1", 0, "INR");
+    expect(scheduleRecovery).toHaveBeenCalledWith({
+      domain: "subscription",
+      ownerId: "sub_1",
+      amount: 0,
+      currency: "INR",
+    });
   });
 
   it("respects an explicit amount/currency override", async () => {
@@ -105,7 +115,12 @@ describe("POST /api/subscriptions/:id/recover", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(scheduleRecovery).toHaveBeenCalledWith("sub_1", 5000, "USD");
+    expect(scheduleRecovery).toHaveBeenCalledWith({
+      domain: "subscription",
+      ownerId: "sub_1",
+      amount: 5000,
+      currency: "USD",
+    });
   });
 
   it("returns 404 for an unknown subscription", async () => {

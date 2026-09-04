@@ -80,4 +80,14 @@ export const api = {
       `/deliveries${qs}`
     );
   },
+  checkouts: (params?: Record<string, string>) => {
+    const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return request<import("./types").Paginated<import("./types").Checkout>>(
+      `/checkouts${qs}`
+    );
+  },
+  checkout: (id: string) =>
+    request<{ data: import("./types").CheckoutDetail }>(
+      `/checkouts/${id}`
+    ),
 };

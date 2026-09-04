@@ -8,6 +8,7 @@ import {
   Mail,
   Moon,
   Sun,
+  ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ const navItems = [
   { to: "/subscriptions", label: "Subscriptions", icon: ReceiptText },
   { to: "/events", label: "Raw Events", icon: ScrollText },
   { to: "/recovery", label: "Recovery", icon: Repeat },
+  { to: "/checkouts", label: "Checkouts", icon: ShoppingCart },
   { to: "/deliveries", label: "Deliveries", icon: Mail },
   { to: "/audit", label: "Audit Ledger", icon: BadgeCheck },
 ];

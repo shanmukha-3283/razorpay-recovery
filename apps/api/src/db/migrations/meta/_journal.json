@@ -29,6 +29,13 @@
       "when": 1788504802903,
       "tag": "0003_majestic_giant_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788530932855,
+      "tag": "0004_chubby_marrow",
+      "breakpoints": true
     }
   ]
 }

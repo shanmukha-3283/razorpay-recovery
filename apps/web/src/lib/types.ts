@@ -59,6 +59,23 @@ export type RecoverResult = {
   reason: string;
 };
 
+export type Checkout = {
+  id: string;
+  razorpayOrderId: string;
+  amount: number;
+  currency: string | null;
+  email: string | null;
+  contact: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CheckoutDetail = Checkout & {
+  shortUrl: string | null;
+  recoveryAttempts: RecoveryAttempt[];
+};
+
 export type SubscriptionDetail = Subscription & {
   customerContact: string | null;
   payments: Payment[];

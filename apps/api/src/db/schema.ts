@@ -96,9 +96,12 @@ export const payments = pgTable(
 
 export const recoveryAttempts = pgTable("recovery_attempts", {
   id: uuid("id").defaultRandom().primaryKey(),
-  subscriptionId: uuid("subscription_id")
-    .references(() => subscriptions.id)
-    .notNull(),
+  // Polymorphic owner: subscriptions use subscriptionId (legacy) while new
+  // domains (checkout, receivable) use domain + domainId. domainId carries
+  // no FK constraint; integrity is enforced at the application layer.
+  domain: varchar("domain", { length: 20 }).default("subscription").notNull(),
+  domainId: uuid("domain_id"),
+  subscriptionId: uuid("subscription_id").references(() => subscriptions.id),
   attemptNumber: integer("attempt_number").notNull(),
   action: varchar("action", { length: 100 }).notNull(),
   status: varchar("status", { length: 50 }).default("pending").notNull(),
@@ -121,9 +124,9 @@ export const auditLedger = pgTable("audit_ledger", {
 
 export const messageDeliveries = pgTable("message_deliveries", {
   id: uuid("id").defaultRandom().primaryKey(),
-  subscriptionId: uuid("subscription_id")
-    .references(() => subscriptions.id)
-    .notNull(),
+  domain: varchar("domain", { length: 20 }).default("subscription").notNull(),
+  domainId: uuid("domain_id"),
+  subscriptionId: uuid("subscription_id").references(() => subscriptions.id),
   recoveryAttemptId: uuid("recovery_attempt_id").references(
     () => recoveryAttempts.id
   ),
@@ -138,3 +141,24 @@ export const messageDeliveries = pgTable("message_deliveries", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   sentAt: timestamp("sent_at"),
 });
+
+export const abandonedCheckouts = pgTable(
+  "abandoned_checkouts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    razorpayOrderId: varchar("razorpay_order_id", { length: 100 }).notNull(),
+    amount: integer("amount").notNull(),
+    currency: varchar("currency", { length: 10 }).default("INR"),
+    email: varchar("email", { length: 255 }),
+    contact: varchar("contact", { length: 50 }),
+    shortUrl: varchar("short_url", { length: 500 }),
+    status: varchar("status", { length: 50 }).default("abandoned").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    razorpayOrderIdIdx: uniqueIndex("abandoned_checkout_order_id_idx").on(
+      table.razorpayOrderId
+    ),
+  })
+);

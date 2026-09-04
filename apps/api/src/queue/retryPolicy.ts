@@ -2,9 +2,29 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { recoveryAttempts } from "../db/schema.js";
 
-export const MAX_ATTEMPTS = 3;
-export const RETRY_WINDOW_HOURS = 72;
-export const RETRY_SPACING_MS = [0, 60 * 60 * 1000, 24 * 60 * 60 * 1000];
+export type RecoveryDomain = "subscription" | "checkout";
+
+type DomainPolicy = {
+  maxAttempts: number;
+  windowHours: number;
+  spacingMs: number[];
+};
+
+const HOUR = 60 * 60 * 1000;
+
+const POLICIES: Record<RecoveryDomain, DomainPolicy> = {
+  // Bounded subscription recovery: max 3 attempts / 72h.
+  subscription: { maxAttempts: 3, windowHours: 72, spacingMs: [0, HOUR, 24 * HOUR] },
+  // Bounded checkout recovery: max 2 reminders / 48h. The first reminder is
+  // delayed 30 minutes to give the customer a grace window to pay.
+  checkout: { maxAttempts: 2, windowHours: 48, spacingMs: [30 * 60 * 1000, 24 * HOUR] },
+};
+
+// Kept for backward compatibility (subscription policy). graph.ts uses
+// MAX_ATTEMPTS for its terminal halt check.
+export const MAX_ATTEMPTS = POLICIES.subscription.maxAttempts;
+export const RETRY_WINDOW_HOURS = POLICIES.subscription.windowHours;
+export const RETRY_SPACING_MS = POLICIES.subscription.spacingMs;
 
 export type RetryDecision = {
   allowed: boolean;
@@ -13,16 +33,17 @@ export type RetryDecision = {
   reason: "scheduled" | "cap_reached";
 };
 
-function retrySpacingFor(attemptNumber: number): number {
-  return (
-    RETRY_SPACING_MS[attemptNumber - 1] ??
-    RETRY_SPACING_MS[RETRY_SPACING_MS.length - 1]
-  );
+function retrySpacingFor(domain: RecoveryDomain, attemptNumber: number): number {
+  const spacing = POLICIES[domain].spacingMs;
+  return spacing[attemptNumber - 1] ?? spacing[spacing.length - 1];
 }
 
 export async function decideRecovery(
-  internalSubscriptionId: string
+  domain: RecoveryDomain,
+  domainId: string
 ): Promise<RetryDecision> {
+  const policy = POLICIES[domain];
+
   const attempts = await db
     .select({
       id: recoveryAttempts.id,
@@ -32,7 +53,8 @@ export async function decideRecovery(
     .from(recoveryAttempts)
     .where(
       and(
-        eq(recoveryAttempts.subscriptionId, internalSubscriptionId),
+        eq(recoveryAttempts.domain, domain),
+        eq(recoveryAttempts.domainId, domainId),
         eq(recoveryAttempts.status, "completed")
       )
     )
@@ -42,21 +64,21 @@ export async function decideRecovery(
     return {
       allowed: true,
       attemptNumber: 1,
-      scheduledFor: new Date(Date.now() + retrySpacingFor(1)),
+      scheduledFor: new Date(Date.now() + retrySpacingFor(domain, 1)),
       reason: "scheduled",
     };
   }
 
   const firstAttempt = attempts[attempts.length - 1];
   const firstAttemptTime = firstAttempt.createdAt.getTime();
-  const windowEnd = firstAttemptTime + RETRY_WINDOW_HOURS * 60 * 60 * 1000;
+  const windowEnd = firstAttemptTime + policy.windowHours * 60 * 60 * 1000;
 
   const lastCompleted = attempts[0];
 
-  if (lastCompleted.attemptNumber >= MAX_ATTEMPTS) {
+  if (lastCompleted.attemptNumber >= policy.maxAttempts) {
     return {
       allowed: false,
-      attemptNumber: MAX_ATTEMPTS,
+      attemptNumber: policy.maxAttempts,
       scheduledFor: null,
       reason: "cap_reached",
     };
@@ -64,7 +86,7 @@ export async function decideRecovery(
 
   const attemptNumber = lastCompleted.attemptNumber + 1;
   const scheduledFor = new Date(
-    lastCompleted.createdAt.getTime() + retrySpacingFor(attemptNumber)
+    lastCompleted.createdAt.getTime() + retrySpacingFor(domain, attemptNumber)
   );
 
   if (scheduledFor.getTime() > windowEnd) {

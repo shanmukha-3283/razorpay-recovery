@@ -78,11 +78,12 @@ describe("dispatchWebhookEvent / getEntity", () => {
       status: "failed",
     }));
     // Recovery is scheduled against the resolved internal subscription id.
-    expect(scheduleRecovery).toHaveBeenCalledWith(
-      "internal-sub-123",
-      24900,
-      "INR"
-    );
+    expect(scheduleRecovery).toHaveBeenCalledWith({
+      domain: "subscription",
+      ownerId: "internal-sub-123",
+      amount: 24900,
+      currency: "INR",
+    });
   });
 
   it("does not schedule recovery when the subscription is not known", async () => {

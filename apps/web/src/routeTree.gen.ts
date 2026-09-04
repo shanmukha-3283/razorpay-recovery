@@ -11,10 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuditRouteImport } from './routes/audit'
+import { Route as CheckoutsRouteImport } from './routes/checkouts'
 import { Route as DeliveriesRouteImport } from './routes/deliveries'
 import { Route as EventsRouteImport } from './routes/events'
 import { Route as RecoveryRouteImport } from './routes/recovery'
 import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
+import { Route as CheckoutsIdRouteImport } from './routes/checkouts.$id'
 import { Route as SubscriptionsIdRouteImport } from './routes/subscriptions.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -25,6 +27,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuditRoute = AuditRouteImport.update({
   id: '/audit',
   path: '/audit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckoutsRoute = CheckoutsRouteImport.update({
+  id: '/checkouts',
+  path: '/checkouts',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DeliveriesRoute = DeliveriesRouteImport.update({
@@ -47,6 +54,11 @@ const SubscriptionsRoute = SubscriptionsRouteImport.update({
   path: '/subscriptions',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CheckoutsIdRoute = CheckoutsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => CheckoutsRoute,
+} as any)
 const SubscriptionsIdRoute = SubscriptionsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -56,29 +68,35 @@ const SubscriptionsIdRoute = SubscriptionsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
+  '/checkouts': typeof CheckoutsRouteWithChildren
   '/deliveries': typeof DeliveriesRoute
   '/events': typeof EventsRoute
   '/recovery': typeof RecoveryRoute
   '/subscriptions': typeof SubscriptionsRouteWithChildren
+  '/checkouts/$id': typeof CheckoutsIdRoute
   '/subscriptions/$id': typeof SubscriptionsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
+  '/checkouts': typeof CheckoutsRouteWithChildren
   '/deliveries': typeof DeliveriesRoute
   '/events': typeof EventsRoute
   '/recovery': typeof RecoveryRoute
   '/subscriptions': typeof SubscriptionsRouteWithChildren
+  '/checkouts/$id': typeof CheckoutsIdRoute
   '/subscriptions/$id': typeof SubscriptionsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
+  '/checkouts': typeof CheckoutsRouteWithChildren
   '/deliveries': typeof DeliveriesRoute
   '/events': typeof EventsRoute
   '/recovery': typeof RecoveryRoute
   '/subscriptions': typeof SubscriptionsRouteWithChildren
+  '/checkouts/$id': typeof CheckoutsIdRoute
   '/subscriptions/$id': typeof SubscriptionsIdRoute
 }
 export interface FileRouteTypes {
@@ -86,34 +104,41 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/audit'
+    | '/checkouts'
     | '/deliveries'
     | '/events'
     | '/recovery'
     | '/subscriptions'
+    | '/checkouts/$id'
     | '/subscriptions/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/audit'
+    | '/checkouts'
     | '/deliveries'
     | '/events'
     | '/recovery'
     | '/subscriptions'
+    | '/checkouts/$id'
     | '/subscriptions/$id'
   id:
     | '__root__'
     | '/'
     | '/audit'
+    | '/checkouts'
     | '/deliveries'
     | '/events'
     | '/recovery'
     | '/subscriptions'
+    | '/checkouts/$id'
     | '/subscriptions/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuditRoute: typeof AuditRoute
+  CheckoutsRoute: typeof CheckoutsRouteWithChildren
   DeliveriesRoute: typeof DeliveriesRoute
   EventsRoute: typeof EventsRoute
   RecoveryRoute: typeof RecoveryRoute
@@ -134,6 +159,13 @@ declare module '@tanstack/react-router' {
       path: '/audit'
       fullPath: '/audit'
       preLoaderRoute: typeof AuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/checkouts': {
+      id: '/checkouts'
+      path: '/checkouts'
+      fullPath: '/checkouts'
+      preLoaderRoute: typeof CheckoutsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/deliveries': {
@@ -164,6 +196,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SubscriptionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/checkouts/$id': {
+      id: '/checkouts/$id'
+      path: '/$id'
+      fullPath: '/checkouts/$id'
+      preLoaderRoute: typeof CheckoutsIdRouteImport
+      parentRoute: typeof CheckoutsRoute
+    }
     '/subscriptions/$id': {
       id: '/subscriptions/$id'
       path: '/$id'
@@ -173,6 +212,18 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface CheckoutsRouteChildren {
+  CheckoutsIdRoute: typeof CheckoutsIdRoute
+}
+
+const CheckoutsRouteChildren: CheckoutsRouteChildren = {
+  CheckoutsIdRoute: CheckoutsIdRoute,
+}
+
+const CheckoutsRouteWithChildren = CheckoutsRoute._addFileChildren(
+  CheckoutsRouteChildren,
+)
 
 interface SubscriptionsRouteChildren {
   SubscriptionsIdRoute: typeof SubscriptionsIdRoute
@@ -189,6 +240,7 @@ const SubscriptionsRouteWithChildren = SubscriptionsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuditRoute: AuditRoute,
+  CheckoutsRoute: CheckoutsRouteWithChildren,
   DeliveriesRoute: DeliveriesRoute,
   EventsRoute: EventsRoute,
   RecoveryRoute: RecoveryRoute,

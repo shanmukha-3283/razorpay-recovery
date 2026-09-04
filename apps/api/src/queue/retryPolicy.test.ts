@@ -39,7 +39,7 @@ describe("decideRecovery / retry policy", () => {
   it("schedules the first attempt ~1h out when no completed attempts exist", async () => {
     attemptsForQuery.mockReturnValue([]);
     const before = Date.now();
-    const decision = await decideRecovery("sub_1");
+    const decision = await decideRecovery("subscription", "sub_1");
 
     expect(decision.allowed).toBe(true);
     expect(decision.attemptNumber).toBe(1);
@@ -55,7 +55,7 @@ describe("decideRecovery / retry policy", () => {
     attemptsForQuery.mockReturnValue([
       makeAttempt(1, t1),
     ]);
-    const d2 = await decideRecovery("sub_1");
+    const d2 = await decideRecovery("subscription", "sub_1");
     expect(d2.attemptNumber).toBe(2);
     expect(d2.scheduledFor!.getTime()).toBe(
       t1.getTime() + RETRY_SPACING_MS[1]
@@ -65,7 +65,7 @@ describe("decideRecovery / retry policy", () => {
       makeAttempt(2, new Date("2026-09-02T00:00:00Z")),
       makeAttempt(1, t1),
     ]);
-    const d3 = await decideRecovery("sub_1");
+    const d3 = await decideRecovery("subscription", "sub_1");
     expect(d3.attemptNumber).toBe(3);
     expect(d3.scheduledFor!.getTime()).toBe(
       new Date("2026-09-02T00:00:00Z").getTime() + RETRY_SPACING_MS[2]
@@ -78,7 +78,7 @@ describe("decideRecovery / retry policy", () => {
       makeAttempt(2, new Date("2026-09-02T00:00:00Z")),
       makeAttempt(1, new Date("2026-09-01T00:00:00Z")),
     ]);
-    const decision = await decideRecovery("sub_1");
+    const decision = await decideRecovery("subscription", "sub_1");
 
     expect(decision.allowed).toBe(false);
     expect(decision.attemptNumber).toBe(MAX_ATTEMPTS);
@@ -97,7 +97,7 @@ describe("decideRecovery / retry policy", () => {
       makeAttempt(1, t1),
     ]);
 
-    const decision = await decideRecovery("sub_1");
+    const decision = await decideRecovery("subscription", "sub_1");
     expect(decision.allowed).toBe(false);
     expect(decision.attemptNumber).toBe(MAX_ATTEMPTS);
     expect(decision.reason).toBe("cap_reached");
@@ -116,11 +116,53 @@ describe("decideRecovery / retry policy", () => {
       makeAttempt(1, t1),
     ]);
 
-    const decision = await decideRecovery("sub_1");
+    const decision = await decideRecovery("subscription", "sub_1");
     expect(decision.allowed).toBe(true);
     expect(decision.attemptNumber).toBe(3);
     expect(decision.scheduledFor!.getTime()).toBeLessThan(
       t1.getTime() + RETRY_WINDOW_HOURS * 60 * 60 * 1000
+    );
+  });
+});
+
+describe("decideRecovery / checkout policy (2 reminders / 48h)", () => {
+  beforeEach(() => {
+    attemptsForQuery.mockReset();
+  });
+
+  it("delays the first reminder by the 30-minute grace window", async () => {
+    attemptsForQuery.mockReturnValue([]);
+    const before = Date.now();
+    const decision = await decideRecovery("checkout", "co_1");
+
+    expect(decision.allowed).toBe(true);
+    expect(decision.attemptNumber).toBe(1);
+    expect(decision.scheduledFor!.getTime()).toBeGreaterThanOrEqual(
+      before + 30 * 60 * 1000
+    );
+  });
+
+  it("caps checkout reminders after 2 completed attempts", async () => {
+    attemptsForQuery.mockReturnValue([
+      makeAttempt(2, new Date("2026-09-02T00:00:00Z")),
+      makeAttempt(1, new Date("2026-09-01T00:00:00Z")),
+    ]);
+
+    const decision = await decideRecovery("checkout", "co_1");
+    expect(decision.allowed).toBe(false);
+    expect(decision.attemptNumber).toBe(2);
+    expect(decision.reason).toBe("cap_reached");
+  });
+
+  it("schedules the second reminder ~24h after the first", async () => {
+    const t1 = new Date("2026-09-01T00:00:00Z");
+    attemptsForQuery.mockReturnValue([makeAttempt(1, t1)]);
+
+    const decision = await decideRecovery("checkout", "co_1");
+    expect(decision.allowed).toBe(true);
+    expect(decision.attemptNumber).toBe(2);
+    expect(decision.scheduledFor!.getTime()).toBe(
+      t1.getTime() + 24 * 60 * 60 * 1000
     );
   });
 });

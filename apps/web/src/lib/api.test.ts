@@ -61,6 +61,20 @@ describe("api client", () => {
     expect(fetchFn).toHaveBeenCalledWith(`/api/${path}`);
   });
 
+  it("GETs checkouts list with filters", async () => {
+    const fetchFn = mockFetchOnce({ data: [], meta: {} });
+    await api.checkouts({ page: "1", status: "abandoned" });
+    const url = fetchFn.mock.calls[0][0];
+    expect(url.startsWith("/api/checkouts?")).toBe(true);
+    expect(url).toContain("status=abandoned");
+  });
+
+  it("GETs a single checkout by id", async () => {
+    const fetchFn = mockFetchOnce({ data: {} });
+    await api.checkout("co_1");
+    expect(fetchFn).toHaveBeenCalledWith("/api/checkouts/co_1");
+  });
+
   it("throws on non-OK responses", async () => {
     mockFetchOnce({}, false, 500);
     await expect(api.stats()).rejects.toThrow("API error 500");

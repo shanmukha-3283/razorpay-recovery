@@ -1,15 +1,145 @@
 import { Worker, type Job } from "bullmq";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { auditLedger, customers, payments, recoveryAttempts, subscriptions } from "../db/schema.js";
+import { abandonedCheckouts, auditLedger, customers, payments, recoveryAttempts, subscriptions } from "../db/schema.js";
 import { connection } from "./connection.js";
 import { type RecoveryJobData } from "./index.js";
+import { checkoutAgent } from "../agent/checkoutAgent.js";
 import { executeRecoveryAction } from "./recoveryAction.js";
 import { executeRazorpayAction } from "../razorpay/actions.js";
 import { sendRecoveryMessage } from "../delivery/index.js";
 
+const TERMINAL_ACTIONS = ["halt", "no-op", "expire", "recovered"];
+
 export async function processRecoveryJob(job: Job<RecoveryJobData>) {
-  const { subscriptionId, attemptNumber, amount } = job.data;
+  if (job.data.domain === "checkout") {
+    return processCheckoutJob(job);
+  }
+  return processSubscriptionJob(job);
+}
+
+async function markCheckoutStatus(checkoutId: string, status: string) {
+  await db
+    .update(abandonedCheckouts)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(abandonedCheckouts.id, checkoutId));
+}
+
+async function processCheckoutJob(job: Job<RecoveryJobData>) {
+  const { ownerId: checkoutId, attemptNumber, amount } = job.data;
+
+  // Same claim guard as the subscription path: only pending attempts run.
+  const [attempt] = await db
+    .update(recoveryAttempts)
+    .set({ status: "in_progress" })
+    .where(
+      and(
+        eq(recoveryAttempts.id, job.id ?? ""),
+        eq(recoveryAttempts.status, "pending")
+      )
+    )
+    .returning({ id: recoveryAttempts.id });
+
+  if (!attempt) {
+    console.log(`Recovery job ${job.id} already handled; skipping.`);
+    return;
+  }
+
+  const attemptId = attempt.id;
+
+  const [checkout] = await db
+    .select()
+    .from(abandonedCheckouts)
+    .where(eq(abandonedCheckouts.id, checkoutId));
+
+  if (!checkout) {
+    await db
+      .update(recoveryAttempts)
+      .set({
+        status: "completed",
+        action: "no-op",
+        details: { reason: "checkout not found" },
+      })
+      .where(eq(recoveryAttempts.id, attemptId));
+    await db.insert(auditLedger).values({
+      recoveryAttemptId: attemptId,
+      action: "no-op",
+      amount,
+      metadata: { reason: "checkout not found" },
+    });
+    return;
+  }
+
+  const result = await checkoutAgent.invoke({
+    checkoutId,
+    attemptNumber,
+    amount,
+    currency: job.data.currency,
+  });
+
+  const decision = result.decision ?? "expire";
+  const details = (result.details ?? {}) as Record<string, unknown>;
+  const draftedMessage =
+    typeof details.message === "string" ? details.message : null;
+
+  // Apply the terminal/progress state locally so the dashboard stays accurate.
+  if (decision === "recovered") await markCheckoutStatus(checkoutId, "recovered");
+  else if (decision === "expire") await markCheckoutStatus(checkoutId, "expired");
+  else if (decision === "escalate") await markCheckoutStatus(checkoutId, "escalated");
+  else await markCheckoutStatus(checkoutId, "reminded");
+
+  await db
+    .update(recoveryAttempts)
+    .set({
+      status: "completed",
+      action: decision,
+      details: { reason: result.reason, ...(result.details ?? {}) },
+    })
+    .where(eq(recoveryAttempts.id, attemptId));
+
+  let delivery: Awaited<ReturnType<typeof sendRecoveryMessage>> | null = null;
+  if (
+    draftedMessage &&
+    (decision === "remind" || decision === "escalate") &&
+    checkout.email
+  ) {
+    let message = details.message as string;
+    if (checkout.shortUrl) {
+      message = `${message}\n\nComplete your purchase here: ${checkout.shortUrl}`;
+      details.message = message;
+    }
+    delivery = await sendRecoveryMessage({
+      domain: "checkout",
+      ownerId: checkoutId,
+      recoveryAttemptId: attemptId,
+      toEmail: checkout.email,
+      message,
+    });
+  }
+
+  await db.insert(auditLedger).values({
+    recoveryAttemptId: attemptId,
+    action: decision,
+    amount,
+    metadata: {
+      ...details,
+      reason: result.reason,
+      checkout: { razorpayOrderId: checkout.razorpayOrderId },
+      ...(delivery
+        ? {
+            delivery: {
+              channel: delivery.channel,
+              status: delivery.status,
+              error: delivery.error ?? null,
+            },
+          }
+        : null),
+    },
+  });
+}
+
+async function processSubscriptionJob(job: Job<RecoveryJobData>) {
+  const { ownerId: subscriptionId, attemptNumber, amount } = job.data;
 
   // Claim guard: only a pending attempt may be claimed. If a prior run
   // (or the startup sweep) already completed/failed it, exit without
@@ -42,11 +172,11 @@ export async function processRecoveryJob(job: Job<RecoveryJobData>) {
   await db
     .update(recoveryAttempts)
     .set({
-      // Terminal decisions (halt/no-op) ran as decided — record them as
-      // completed so they count toward the retry cap and don't render
-      // as failures. Only genuine errors are "failed".
+      // Terminal decisions ran as decided — record them as completed so
+      // they count toward the retry cap and don't render as failures.
+      // Only genuine errors are "failed".
       status:
-        result.success || result.action === "halt" || result.action === "no-op"
+        result.success || TERMINAL_ACTIONS.includes(result.action)
           ? "completed"
           : "failed",
       action: result.action,
@@ -131,7 +261,8 @@ export async function processRecoveryJob(job: Job<RecoveryJobData>) {
     }
 
     delivery = await sendRecoveryMessage({
-      subscriptionId,
+      domain: "subscription",
+      ownerId: subscriptionId,
       recoveryAttemptId: attemptId,
       toEmail,
       message: details.message as string,

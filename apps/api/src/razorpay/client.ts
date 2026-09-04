@@ -145,3 +145,21 @@ export async function issueInvoice(
     `/invoices/${invoiceId}/issue`
   );
 }
+
+export type RazorpayOrder = {
+  id: string;
+  entity: string;
+  amount?: number;
+  currency?: string;
+  status?: string;
+  amount_paid?: number;
+  amount_due?: number;
+  receipt?: string | null;
+  created_at?: number;
+};
+
+export async function getOrder(
+  razorpayOrderId: string
+): Promise<RazorpayOrder> {
+  return request<RazorpayOrder>("GET", `/orders/${razorpayOrderId}`);
+}

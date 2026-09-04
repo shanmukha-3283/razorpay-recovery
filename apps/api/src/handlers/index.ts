@@ -57,11 +57,12 @@ async function handlePaymentFailed({ payload }: HandlerContext) {
   });
 
   if (internalSubscriptionId) {
-    await scheduleRecovery(
-      internalSubscriptionId,
-      (payment.amount as number) ?? 0,
-      (payment.currency as string) || "INR"
-    );
+    await scheduleRecovery({
+      domain: "subscription",
+      ownerId: internalSubscriptionId,
+      amount: (payment.amount as number) ?? 0,
+      currency: (payment.currency as string) || "INR",
+    });
   }
 }
 
@@ -109,11 +110,12 @@ async function handleSubscriptionPending({ payload }: HandlerContext) {
   }
 
   if (subscriptionId) {
-    await scheduleRecovery(
-      subscriptionId,
-      (payment?.amount as number) ?? 0,
-      (payment?.currency as string) || "INR"
-    );
+    await scheduleRecovery({
+      domain: "subscription",
+      ownerId: subscriptionId,
+      amount: (payment?.amount as number) ?? 0,
+      currency: (payment?.currency as string) || "INR",
+    });
   }
 }
 

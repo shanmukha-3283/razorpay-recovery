@@ -4,6 +4,8 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
+  useCheckout,
+  useCheckouts,
   useManualRecovery,
   useSubscription,
   useSubscriptionSync,
@@ -14,6 +16,8 @@ vi.mock("@/lib/api", () => ({
     subscription: vi.fn(),
     subscriptionSync: vi.fn(),
     recoverSubscription: vi.fn(),
+    checkouts: vi.fn(),
+    checkout: vi.fn(),
   },
 }));
 
@@ -102,5 +106,34 @@ describe("data hooks", () => {
     expect(result.current.error?.message).toBe(
       "Recovery not allowed: cap_reached"
     );
+  });
+
+  it("useCheckouts forwards filters", async () => {
+    mockedApi.checkouts.mockResolvedValue({
+      data: [],
+      meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
+    } as never);
+    const { wrapper } = setup();
+    const { result } = renderHook(
+      () => useCheckouts({ status: "abandoned" }),
+      { wrapper }
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockedApi.checkouts).toHaveBeenCalledWith({
+      status: "abandoned",
+    });
+  });
+
+  it("useCheckout unwraps res.data", async () => {
+    mockedApi.checkout.mockResolvedValue({
+      data: { id: "co_1" },
+    } as never);
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useCheckout("co_1"), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ id: "co_1" });
+    expect(mockedApi.checkout).toHaveBeenCalledWith("co_1");
   });
 });

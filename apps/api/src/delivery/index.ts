@@ -1,9 +1,12 @@
 import { db } from "../db/index.js";
 import { messageDeliveries } from "../db/schema.js";
+import type { RecoveryDomain } from "../queue/retryPolicy.js";
 import { sendEmail } from "./email.js";
 
 export type SendRecoveryMessageInput = {
-  subscriptionId: string;
+  domain: RecoveryDomain;
+  /** Internal owner id: subscription id or abandoned-checkout id. */
+  ownerId: string;
   recoveryAttemptId: string;
   toEmail?: string | null;
   message?: string | null;
@@ -21,7 +24,9 @@ function createDelivery(
   extras: { providerMessageId?: string; error?: string } = {}
 ) {
   return db.insert(messageDeliveries).values({
-    subscriptionId: input.subscriptionId,
+    domain: input.domain,
+    domainId: input.ownerId,
+    subscriptionId: input.domain === "subscription" ? input.ownerId : null,
     recoveryAttemptId: input.recoveryAttemptId,
     channel: "email",
     toEmail: input.toEmail,

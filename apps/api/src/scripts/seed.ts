@@ -117,6 +117,41 @@ async function seed() {
   console.log("Seed complete.");
   console.log(`  subscriptions: ${s1.id}, ${s2.id}, ${s3.id}`);
 
+  // Demo abandoned checkouts (Track A): one fresh, one reminded, one recovered.
+  await sql`
+    insert into abandoned_checkouts (razorpay_order_id, amount, currency, email, contact, short_url, status)
+    values
+      ('seed_ord_co_new', 49900, 'INR', 'buyer1@example.com', '+919000000011', 'https://rzp.io/x/seed1', 'abandoned'),
+      ('seed_ord_co_reminded', 99900, 'INR', 'buyer2@example.com', '+919000000012', 'https://rzp.io/x/seed2', 'reminded'),
+      ('seed_ord_co_recovered', 149900, 'INR', 'buyer3@example.com', null, null, 'recovered')
+    on conflict (razorpay_order_id) do nothing
+  `;
+
+  const [coRows] = await sql`
+    select id from abandoned_checkouts where razorpay_order_id = 'seed_ord_co_reminded'
+  `;
+  if (coRows) {
+    const [existingAttempt] = await sql`
+      select id from recovery_attempts
+      where domain = 'checkout' and domain_id = ${coRows.id} and attempt_number = 1
+    `;
+    if (!existingAttempt) {
+      const [coAttempt] = await sql`
+        insert into recovery_attempts (domain, domain_id, subscription_id, attempt_number, action, status, amount, details, next_attempt_at)
+        values ('checkout', ${coRows.id}, null, 1, 'remind', 'completed', 99900, '{"reason":"first payment-link reminder"}', now() + interval '24 hours')
+        returning id
+      `;
+      await sql`
+        insert into message_deliveries (domain, domain_id, subscription_id, recovery_attempt_id, channel, to_email, status, provider_message_id, message_body, sent_at)
+        values ('checkout', ${coRows.id}, null, ${coAttempt.id}, 'email', 'buyer2@example.com', 'sent', 'seed_co_msg_1', 'Your reserved items are waiting.', now() - interval '30 minutes')
+      `;
+      await sql`
+        insert into audit_ledger (recovery_attempt_id, action, amount, metadata)
+        values (${coAttempt.id}, 'remind', 99900, '{"domain":"checkout","note":"first reminder"}')
+      `;
+    }
+  }
+
   await sql.end();
 }
 

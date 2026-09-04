@@ -1,8 +1,11 @@
 import { Queue } from "bullmq";
 import { connection } from "./connection.js";
+import type { RecoveryDomain } from "./retryPolicy.js";
 
 export type RecoveryJobData = {
-  subscriptionId: string;
+  domain: RecoveryDomain;
+  /** Internal owner id: subscription id or abandoned-checkout id. */
+  ownerId: string;
   attemptNumber: number;
   amount: number;
   currency: string;

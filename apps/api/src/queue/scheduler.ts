@@ -1,38 +1,83 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { recoveryAttempts, subscriptions } from "../db/schema.js";
+import {
+  abandonedCheckouts,
+  recoveryAttempts,
+  subscriptions,
+} from "../db/schema.js";
 import { recoveryQueue, type RecoveryJobData } from "./index.js";
-import { decideRecovery, MAX_ATTEMPTS, RetryDecision } from "./retryPolicy.js";
+import {
+  decideRecovery,
+  MAX_ATTEMPTS,
+  type RecoveryDomain,
+  type RetryDecision,
+} from "./retryPolicy.js";
+
+export type ScheduleInput = {
+  domain: RecoveryDomain;
+  /** Internal owner id: subscription id or abandoned-checkout id. */
+  ownerId: string;
+  amount: number;
+  currency: string;
+};
+
+const TERMINAL_CHECKOUT_STATUSES = ["recovered", "expired"];
 
 export async function scheduleRecovery(
-  internalSubscriptionId: string,
-  amount: number,
-  currency: string
+  input: ScheduleInput
 ): Promise<RetryDecision> {
-  // Terminal guard: a halted/cancelled subscription never re-arms, even
-  // if new failure events arrive after the halt. Without this, each new
-  // event would schedule a duplicate attempt that halts again forever.
-  const [sub] = await db
-    .select({ status: subscriptions.status })
-    .from(subscriptions)
-    .where(eq(subscriptions.id, internalSubscriptionId));
+  const { domain, ownerId, amount, currency } = input;
 
-  if (sub && (sub.status === "halted" || sub.status === "cancelled")) {
-    return {
-      allowed: false,
-      attemptNumber: MAX_ATTEMPTS,
-      scheduledFor: null,
-      reason: "cap_reached",
-    };
+  if (domain === "subscription") {
+    // Terminal guard: a halted/cancelled subscription never re-arms, even
+    // if new failure events arrive after the halt. Without this, each new
+    // event would schedule a duplicate attempt that halts again forever.
+    const [sub] = await db
+      .select({ status: subscriptions.status })
+      .from(subscriptions)
+      .where(eq(subscriptions.id, ownerId));
+
+    if (sub && (sub.status === "halted" || sub.status === "cancelled")) {
+      return {
+        allowed: false,
+        attemptNumber: MAX_ATTEMPTS,
+        scheduledFor: null,
+        reason: "cap_reached",
+      };
+    }
   }
 
-  const decision = await decideRecovery(internalSubscriptionId);
+  if (domain === "checkout") {
+    // Terminal guard: recovered/expired checkouts never re-arm.
+    const [checkout] = await db
+      .select({ status: abandonedCheckouts.status })
+      .from(abandonedCheckouts)
+      .where(eq(abandonedCheckouts.id, ownerId));
+
+    if (checkout && TERMINAL_CHECKOUT_STATUSES.includes(checkout.status)) {
+      return {
+        allowed: false,
+        attemptNumber: 2,
+        scheduledFor: null,
+        reason: "cap_reached",
+      };
+    }
+  }
+
+  const decision = await decideRecovery(domain, ownerId);
 
   if (!decision.allowed || !decision.scheduledFor) {
-    await db
-      .update(subscriptions)
-      .set({ status: "halted", updatedAt: new Date() })
-      .where(eq(subscriptions.id, internalSubscriptionId));
+    if (domain === "subscription") {
+      await db
+        .update(subscriptions)
+        .set({ status: "halted", updatedAt: new Date() })
+        .where(eq(subscriptions.id, ownerId));
+    } else {
+      await db
+        .update(abandonedCheckouts)
+        .set({ status: "expired", updatedAt: new Date() })
+        .where(eq(abandonedCheckouts.id, ownerId));
+    }
     return decision;
   }
 
@@ -41,7 +86,9 @@ export async function scheduleRecovery(
   const [attempt] = await db
     .insert(recoveryAttempts)
     .values({
-      subscriptionId: internalSubscriptionId,
+      domain,
+      domainId: ownerId,
+      subscriptionId: domain === "subscription" ? ownerId : null,
       attemptNumber: decision.attemptNumber,
       action: "recovery_attempt",
       status: "pending",
@@ -51,14 +98,15 @@ export async function scheduleRecovery(
     .returning({ id: recoveryAttempts.id });
 
   const jobData: RecoveryJobData = {
-    subscriptionId: internalSubscriptionId,
+    domain,
+    ownerId,
     attemptNumber: decision.attemptNumber,
     amount,
     currency,
   };
 
   await recoveryQueue.add(
-    `recovery-${internalSubscriptionId}-${decision.attemptNumber}`,
+    `recovery-${domain}-${ownerId}-${decision.attemptNumber}`,
     jobData,
     {
       // Deliberately no queue-level retries (attempts: 1): the job body

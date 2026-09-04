@@ -4,7 +4,11 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { RecoveryAttempt, SubscriptionDetail } from "@/lib/types";
+import type {
+  CheckoutDetail,
+  RecoveryAttempt,
+  SubscriptionDetail,
+} from "@/lib/types";
 
 export function useStats() {
   return useQuery({
@@ -96,4 +100,23 @@ export function useManualRecovery() {
   });
 }
 
-export type { RecoveryAttempt, SubscriptionDetail };
+export function useCheckouts(filters?: Record<string, string>) {
+  return useQuery({
+    queryKey: ["checkouts", filters],
+    queryFn: () => api.checkouts(filters),
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useCheckout(id: string) {
+  return useQuery({
+    queryKey: ["checkout", id],
+    queryFn: async () => {
+      const res = await api.checkout(id);
+      return res.data satisfies CheckoutDetail;
+    },
+    enabled: !!id,
+  });
+}
+
+export type { CheckoutDetail, RecoveryAttempt, SubscriptionDetail };

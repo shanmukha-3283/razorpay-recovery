@@ -207,7 +207,12 @@ subscriptionsRoute.post("/:id/recover", async (c) => {
 
   // Reuses the webhook scheduling path: the halted/cancelled guard and
   // the 3-attempt/72h cap apply identically to manual triggers.
-  const decision = await scheduleRecovery(id, amount, currency);
+  const decision = await scheduleRecovery({
+    domain: "subscription",
+    ownerId: id,
+    amount,
+    currency,
+  });
 
   if (!decision.allowed || !decision.scheduledFor) {
     return c.json(
