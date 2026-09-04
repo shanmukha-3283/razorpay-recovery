@@ -206,25 +206,26 @@ async function seed() {
 
   // Demo batches (Track C): one open batch per domain, back-tagging the
   // attempts seeded above so reporting shows measured numbers immediately.
+  // Fresh open seed batches on every run: delete + recreate so a previously
+  // closed batch never leaves stale demo state behind.
   for (const [name, domain] of [
     ["seed-launch-subscriptions", "subscription"],
     ["seed-launch-checkouts", "checkout"],
     ["seed-launch-receivables", "receivable"],
   ] as Array<[string, string]>) {
-    const [existingBatch] = await sql`
-      select id from recovery_batches where name = ${name}
+    await sql`
+      update recovery_attempts set batch_id = null
+      where batch_id in (select id from recovery_batches where name = ${name})
     `;
-    let batchId: string;
-    if (existingBatch) {
-      batchId = existingBatch.id;
-    } else {
-      const [batch] = await sql`
-        insert into recovery_batches (name, domain, status, created_by)
-        values (${name}, ${domain}, 'open', 'seed')
-        returning id
-      `;
-      batchId = batch.id;
-    }
+    await sql`
+      delete from recovery_batches where name = ${name}
+    `;
+    const [batch] = await sql`
+      insert into recovery_batches (name, domain, status, created_by)
+      values (${name}, ${domain}, 'open', 'seed')
+      returning id
+    `;
+    const batchId: string = batch.id;
     await sql`
       update recovery_attempts set batch_id = ${batchId}
       where domain = ${domain} and batch_id is null

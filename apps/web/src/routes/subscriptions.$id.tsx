@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateTime, formatINR } from "@/lib/utils";
+import { getAttemptInsight } from "@/lib/attemptDetails";
 
 export const Route = createFileRoute("/subscriptions/$id")({
   component: SubscriptionDetailPage,
@@ -213,10 +214,27 @@ function SubscriptionDetailPage() {
                     };
                   };
                   const rz = details.razorpay;
+                  const insight = getAttemptInsight(r.details);
                   return (
                     <TableRow key={r.id}>
                       <TableCell>#{r.attemptNumber}</TableCell>
-                      <TableCell>{r.action}</TableCell>
+                      <TableCell>
+                        <div>{r.action}</div>
+                        {(insight.failureCategory || insight.reason) && (
+                          <div className="mt-1 space-y-1">
+                            {insight.failureCategory && (
+                              <Badge variant="secondary">
+                                {insight.failureCategory}
+                              </Badge>
+                            )}
+                            {insight.reason && (
+                              <p className="text-xs text-muted-foreground">
+                                {insight.reason}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={r.status === "completed" ? "success" : r.status === "failed" ? "destructive" : "warning"}>
                           {r.status}

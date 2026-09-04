@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
 import { useStats, useRecovery } from "@/service/hooks";
+import { getAttemptInsight } from "@/lib/attemptDetails";
 import { formatINR, formatDateTime } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -180,6 +181,21 @@ function DashboardPage() {
                       Attempt #{r.attemptNumber} · {r.action} ·{" "}
                       {formatDateTime(r.createdAt)}
                     </p>
+                    {(() => {
+                      const insight = getAttemptInsight(r.details);
+                      return (
+                        (insight.failureCategory || insight.reason) && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {insight.failureCategory && (
+                              <Badge variant="secondary" className="mr-1">
+                                {insight.failureCategory}
+                              </Badge>
+                            )}
+                            {insight.reason}
+                          </p>
+                        )
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-medium">

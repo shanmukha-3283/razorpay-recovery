@@ -9,6 +9,39 @@ Monorepo (pnpm + turbo):
 - `apps/api` — Hono + TypeScript backend
 - `apps/web` — React + Vite dashboard (shadcn-admin)
 
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph triggers["Revenue-at-risk triggers"]
+        WH[Razorpay webhooks]
+        CO[Abandoned orders]
+        INV[Overdue invoices CSV/API]
+    end
+    triggers --> INGEST[persist raw record]
+    INGEST --> CAP{cap + terminal-guard check}
+    CAP -->|refused| CLOSE[close locally: halted/expired/breached-closed]
+    CAP -->|allowed| Q[(BullMQ delayed job)]
+    Q --> W[claim-guarded worker]
+    W --> AG[domain agent: classify → decide → draft]
+    AG --> ACT[Razorpay action + compliant email]
+    ACT --> AUD[audit_ledger row]
+    AG --> ESC[human escalation + SLA]
+```
+
+## Problem-statement fit
+
+| Requirement | Where it lives | How it's proven |
+|---|---|---|
+| Detect + recover payment failures | `handlers/`, subscription agent, worker | live webhook → attempt → audit runs |
+| Checkout abandonment recovery | `routes/checkouts.ts`, `agent/checkoutAgent.ts`, Checkouts pages | simulator + 30-min grace + pay-link email |
+| Overdue receivables + promises | `routes/receivables.ts`, `agent/receivableAgent.ts`, Receivables pages | CSV import, promise/breach flows, seed bands |
+| Right intervention via AI | `agent/*`, `llmService.ts` | `failureCategory` chips + reasons rendered in UI |
+| Bounded workflows + stopping rules | `queue/retryPolicy.ts` (3/72h, 2/48h, 4/30d) | 155-test suite incl. cap/boundary tests |
+| Measured money per batch | `routes/batches.ts`, Batches pages | recovered-$ counts only post-batch money movement |
+| Compliant escalation | `delivery/compliance.ts`, DND, escalations queue | skipped-with-reason rows, SLA tracking |
+| Audit trail | `audit_ledger` on every worker path | Audit page with metadata viewer |
+
 ## Stack
 
 | Layer      | Tech                                    |

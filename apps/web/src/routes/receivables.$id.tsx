@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateTime, formatINR } from "@/lib/utils";
+import { getAttemptInsight } from "@/lib/attemptDetails";
 
 export const Route = createFileRoute("/receivables/$id")({
   component: ReceivableDetailPage,
@@ -197,7 +198,28 @@ function ReceivableDetailPage() {
                 data.recoveryAttempts.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell>#{r.attemptNumber}</TableCell>
-                    <TableCell>{r.action}</TableCell>
+                    <TableCell>
+                      <div>{r.action}</div>
+                      {(() => {
+                        const insight = getAttemptInsight(r.details);
+                        return (
+                          (insight.failureCategory || insight.reason) && (
+                            <div className="mt-1 space-y-1">
+                              {insight.failureCategory && (
+                                <Badge variant="secondary">
+                                  {insight.failureCategory}
+                                </Badge>
+                              )}
+                              {insight.reason && (
+                                <p className="text-xs text-muted-foreground">
+                                  {insight.reason}
+                                </p>
+                              )}
+                            </div>
+                          )
+                        );
+                      })()}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={r.status === "completed" ? "success" : r.status === "failed" ? "destructive" : "warning"}>
                         {r.status}

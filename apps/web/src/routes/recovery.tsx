@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRecovery } from "@/service/hooks";
 import type { RecoveryAttempt } from "@/lib/types";
+import { getAttemptInsight } from "@/lib/attemptDetails";
 import { formatDateTime, formatINR } from "@/lib/utils";
 
 export const Route = createFileRoute("/recovery")({
@@ -35,6 +36,25 @@ function RecoveryPage() {
       cell: ({ getValue }) => `#${getValue() as number}`,
     },
     { header: "Action", accessorKey: "action" },
+    {
+      header: "AI insight",
+      cell: ({ row }) => {
+        const insight = getAttemptInsight(row.original.details);
+        if (!insight.failureCategory && !insight.reason) {
+          return <span className="text-muted-foreground">—</span>;
+        }
+        return (
+          <div className="max-w-xs space-y-1">
+            {insight.failureCategory && (
+              <Badge variant="secondary">{insight.failureCategory}</Badge>
+            )}
+            {insight.reason && (
+              <p className="text-xs text-muted-foreground">{insight.reason}</p>
+            )}
+          </div>
+        );
+      },
+    },
     {
       header: "Status",
       accessorKey: "status",

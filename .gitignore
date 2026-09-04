@@ -5,3 +5,8 @@ dist
 .env.local
 *.log
 *.tsbuildinfo
+
+# Local-only project notes (never commit or push these)
+PROJECT_WORKFLOW.md
+DEMO_SCRIPT.md
+problem-statement.txt

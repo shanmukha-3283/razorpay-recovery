@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAudit } from "@/service/hooks";
 import type { AuditEntry } from "@/lib/types";
+import { getAuditSummary } from "@/lib/attemptDetails";
 import { formatDateTime, formatINR } from "@/lib/utils";
 
 export const Route = createFileRoute("/audit")({
@@ -43,6 +44,36 @@ function AuditPage() {
         ) : (
           <Badge variant="secondary">{row.original.action.split("_")[0]}</Badge>
         ),
+    },
+    {
+      header: "Insight",
+      cell: ({ row }) => {
+        const summary = getAuditSummary(row.original.metadata);
+        return summary ? (
+          <span className="text-xs text-muted-foreground">{summary}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        );
+      },
+    },
+    {
+      header: "Details",
+      cell: ({ row }) => {
+        const metadata = row.original.metadata;
+        if (metadata == null) {
+          return <span className="text-muted-foreground">—</span>;
+        }
+        return (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-primary underline">
+              View
+            </summary>
+            <pre className="mt-1 max-w-md overflow-auto rounded bg-muted p-2 font-mono text-[11px]">
+              {JSON.stringify(metadata, null, 2)}
+            </pre>
+          </details>
+        );
+      },
     },
   ];
 
