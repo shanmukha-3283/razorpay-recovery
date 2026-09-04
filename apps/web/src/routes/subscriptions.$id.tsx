@@ -1,6 +1,10 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { RefreshCw } from "lucide-react";
-import { useSubscription, useSubscriptionSync } from "@/service/hooks";
+import { Play, RefreshCw } from "lucide-react";
+import {
+  useManualRecovery,
+  useSubscription,
+  useSubscriptionSync,
+} from "@/service/hooks";
 import {
   Card,
   CardContent,
@@ -27,6 +31,7 @@ function SubscriptionDetailPage() {
   const { id } = Route.useParams();
   const { data, isLoading } = useSubscription(id);
   const syncMutation = useSubscriptionSync();
+  const recoverMutation = useManualRecovery();
 
   if (isLoading) return <p className="text-muted-foreground">Loading…</p>;
   if (!data)
@@ -51,6 +56,15 @@ function SubscriptionDetailPage() {
         <div className="flex items-center gap-3">
           <Badge>{data.status}</Badge>
           <Button
+            variant="default"
+            size="sm"
+            onClick={() => recoverMutation.mutate({ id })}
+            disabled={recoverMutation.isPending}
+          >
+            <Play className="size-4" />
+            {recoverMutation.isPending ? "Scheduling…" : "Retry recovery now"}
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             onClick={() => syncMutation.mutate(id)}
@@ -65,6 +79,20 @@ function SubscriptionDetailPage() {
           </Button>
         </div>
       </div>
+      {recoverMutation.isSuccess && (
+        <p className="text-sm text-muted-foreground">
+          Recovery attempt #{recoverMutation.data.data.attemptNumber} scheduled
+          {recoverMutation.data.data.scheduledFor
+            ? ` for ${formatDateTime(recoverMutation.data.data.scheduledFor)}`
+            : ""}
+          .
+        </p>
+      )}
+      {recoverMutation.isError && (
+        <p className="text-sm text-destructive">
+          {recoverMutation.error.message}
+        </p>
+      )}
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

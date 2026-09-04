@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, eq, ilike, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   customers,
@@ -10,6 +10,7 @@ import {
 import { parsePagination, paginationMeta } from "./pagination.js";
 import { getSubscription, RazorpayApiError } from "../razorpay/client.js";
 import { syncSubscription } from "../handlers/sync.js";
+import { scheduleRecovery } from "../queue/scheduler.js";
 
 const subscriptionsRoute = new Hono();
 
@@ -163,6 +164,71 @@ subscriptionsRoute.post("/:id/sync", async (c) => {
   });
 
   return c.json({ data: { id: sub.id, status: remote.status, synced: true } });
+});
+
+subscriptionsRoute.post("/:id/recover", async (c) => {
+  const id = c.req.param("id");
+
+  const [sub] = await db
+    .select({ id: subscriptions.id })
+    .from(subscriptions)
+    .where(eq(subscriptions.id, id));
+
+  if (!sub) return c.json({ error: "Subscription not found" }, 404);
+
+  // Amount resolution: explicit body override, else the latest failed
+  // payment for this subscription, else a zero-amount fallback.
+  let body: { amount?: number; currency?: string } = {};
+  try {
+    body = (await c.req.json()) as typeof body;
+  } catch {
+    body = {};
+  }
+
+  let amount = typeof body.amount === "number" ? body.amount : null;
+  let currency = body.currency ?? null;
+
+  if (amount === null || currency === null) {
+    const [latestFailed] = await db
+      .select({ amount: payments.amount, currency: payments.currency })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.subscriptionId, id),
+          eq(payments.status, "failed")
+        )
+      )
+      .orderBy(desc(payments.createdAt))
+      .limit(1);
+
+    if (amount === null) amount = latestFailed?.amount ?? 0;
+    if (currency === null) currency = latestFailed?.currency ?? "INR";
+  }
+
+  // Reuses the webhook scheduling path: the halted/cancelled guard and
+  // the 3-attempt/72h cap apply identically to manual triggers.
+  const decision = await scheduleRecovery(id, amount, currency);
+
+  if (!decision.allowed || !decision.scheduledFor) {
+    return c.json(
+      {
+        error: `Recovery not allowed: ${decision.reason}`,
+        scheduled: false,
+        reason: decision.reason,
+        attemptNumber: decision.attemptNumber,
+      },
+      409
+    );
+  }
+
+  return c.json({
+    data: {
+      scheduled: true,
+      attemptNumber: decision.attemptNumber,
+      scheduledFor: decision.scheduledFor,
+      reason: decision.reason,
+    },
+  });
 });
 
 export default subscriptionsRoute;

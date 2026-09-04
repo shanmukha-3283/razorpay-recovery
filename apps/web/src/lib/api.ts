@@ -37,6 +37,25 @@ export const api = {
     post<{ data: { id: string; status: string; synced: boolean } }>(
       `/subscriptions/${id}/sync`
     ),
+  recoverSubscription: async (
+    id: string,
+    body?: { amount?: number; currency?: string }
+  ) => {
+    const res = await fetch(`${API_URL}/subscriptions/${id}/recover`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    });
+    const json = (await res.json()) as
+      | { data: import("./types").RecoverResult }
+      | { error: string; scheduled: false; reason: string };
+    if (!res.ok) {
+      throw new Error(
+        "error" in json ? json.error : `API error ${res.status}`
+      );
+    }
+    return json as { data: import("./types").RecoverResult };
+  },
   events: (params?: Record<string, string>) => {
     const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
     return request<import("./types").Paginated<import("./types").RawEvent>>(

@@ -52,6 +52,13 @@ export type RecoveryAttempt = {
   razorpaySubscriptionId: string | null;
 };
 
+export type RecoverResult = {
+  scheduled: boolean;
+  attemptNumber: number;
+  scheduledFor: string | null;
+  reason: string;
+};
+
 export type SubscriptionDetail = Subscription & {
   customerContact: string | null;
   payments: Payment[];

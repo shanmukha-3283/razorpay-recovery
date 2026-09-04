@@ -78,4 +78,22 @@ export function useSubscriptionSync() {
   });
 }
 
+export function useManualRecovery() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string;
+      body?: { amount?: number; currency?: string };
+    }) => api.recoverSubscription(id, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["subscription"] });
+      queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["recovery"] });
+    },
+  });
+}
+
 export type { RecoveryAttempt, SubscriptionDetail };
