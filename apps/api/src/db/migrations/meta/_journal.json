@@ -43,6 +43,13 @@
       "when": 1788532354237,
       "tag": "0005_sharp_phantom_reporter",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788533829035,
+      "tag": "0006_lying_ares",
+      "breakpoints": true
     }
   ]
 }

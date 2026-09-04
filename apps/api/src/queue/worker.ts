@@ -6,11 +6,12 @@ import { connection } from "./connection.js";
 import { type RecoveryJobData } from "./index.js";
 import { checkoutAgent } from "../agent/checkoutAgent.js";
 import { receivableAgent } from "../agent/receivableAgent.js";
+import { fileEscalation } from "../escalations.js";
 import { executeRecoveryAction } from "./recoveryAction.js";
 import { executeRazorpayAction } from "../razorpay/actions.js";
 import { sendRecoveryMessage } from "../delivery/index.js";
 
-const TERMINAL_ACTIONS = ["halt", "no-op", "expire", "recovered", "paid"];
+const TERMINAL_ACTIONS = ["halt", "no-op", "expire", "recovered", "paid", "escalate"];
 
 export async function processRecoveryJob(job: Job<RecoveryJobData>) {
   if (job.data.domain === "checkout") {
@@ -121,6 +122,17 @@ async function processCheckoutJob(job: Job<RecoveryJobData>) {
     });
   }
 
+  let escalationId: string | null = null;
+  if (decision === "escalate") {
+    escalationId = await fileDomainEscalation(
+      "checkout",
+      checkoutId,
+      typeof result.reason === "string"
+        ? result.reason
+        : "checkout final escalation"
+    );
+  }
+
   await db.insert(auditLedger).values({
     recoveryAttemptId: attemptId,
     action: decision,
@@ -138,8 +150,26 @@ async function processCheckoutJob(job: Job<RecoveryJobData>) {
             },
           }
         : null),
+      ...(escalationId ? { escalation: { id: escalationId } } : null),
     },
   });
+}
+
+/**
+ * File a human escalation without failing the job: escalation filing must
+ * never break recovery processing, so errors are logged and swallowed.
+ */
+async function fileDomainEscalation(
+  domain: "subscription" | "checkout" | "receivable",
+  ownerId: string,
+  reason: string
+): Promise<string | null> {
+  try {
+    return await fileEscalation({ domain, ownerId, reason });
+  } catch (err) {
+    console.error(`Failed to file escalation for ${domain} ${ownerId}:`, err);
+    return null;
+  }
 }
 
 async function markPromiseStatus(promiseId: string, status: string) {
@@ -246,6 +276,17 @@ async function processReceivableJob(job: Job<RecoveryJobData>) {
     });
   }
 
+  let escalationId: string | null = null;
+  if (decision === "breach" || decision === "escalate") {
+    escalationId = await fileDomainEscalation(
+      "receivable",
+      invoiceId,
+      typeof result.reason === "string"
+        ? result.reason
+        : "receivable escalation"
+    );
+  }
+
   await db.insert(auditLedger).values({
     recoveryAttemptId: attemptId,
     action: decision,
@@ -263,6 +304,7 @@ async function processReceivableJob(job: Job<RecoveryJobData>) {
             },
           }
         : null),
+      ...(escalationId ? { escalation: { id: escalationId } } : null),
     },
   });
 }
@@ -398,6 +440,17 @@ async function processSubscriptionJob(job: Job<RecoveryJobData>) {
     });
   }
 
+  let escalationId: string | null = null;
+  if (result.action === "escalate") {
+    escalationId = await fileDomainEscalation(
+      "subscription",
+      subscriptionId,
+      typeof details.reason === "string"
+        ? details.reason
+        : "subscription escalation"
+    );
+  }
+
   const auditMetadata = {
     ...details,
     ...(razorpayResult
@@ -420,6 +473,7 @@ async function processSubscriptionJob(job: Job<RecoveryJobData>) {
           },
         }
       : null),
+    ...(escalationId ? { escalation: { id: escalationId } } : null),
   };
 
   await db.insert(auditLedger).values({

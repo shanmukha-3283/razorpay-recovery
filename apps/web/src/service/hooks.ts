@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type {
+  BatchDetail,
   CheckoutDetail,
   ReceivableDetail,
   RecoveryAttempt,
@@ -167,7 +168,112 @@ export function useMarkInvoicePaid() {
   });
 }
 
+export function useBatches(filters?: Record<string, string>) {
+  return useQuery({
+    queryKey: ["batches", filters],
+    queryFn: () => api.batches(filters),
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useBatch(id: string) {
+  return useQuery({
+    queryKey: ["batch", id],
+    queryFn: async () => {
+      const res = await api.batch(id);
+      return res.data satisfies BatchDetail;
+    },
+    enabled: !!id,
+  });
+}
+
+export function useCreateBatch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; domain: string }) =>
+      api.createBatch(body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["batches"] });
+    },
+  });
+}
+
+export function useCloseBatch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.closeBatch(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["batches"] });
+      queryClient.invalidateQueries({ queryKey: ["batch"] });
+    },
+  });
+}
+
+export function useEscalations(filters?: Record<string, string>) {
+  return useQuery({
+    queryKey: ["escalations", filters],
+    queryFn: () => api.escalations(filters),
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useAckEscalation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: { status?: string; owner?: string };
+    }) => api.ackEscalation(id, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["escalations"] });
+    },
+  });
+}
+
+export function useCheckEscalationSla() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.checkEscalationSla(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["escalations"] });
+    },
+  });
+}
+
+export function useDnd(filters?: Record<string, string>) {
+  return useQuery({
+    queryKey: ["dnd", filters],
+    queryFn: () => api.dndList(filters),
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useAddDnd() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { email: string; reason?: string }) =>
+      api.dndAdd(body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dnd"] });
+    },
+  });
+}
+
+export function useRemoveDnd() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.dndRemove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dnd"] });
+    },
+  });
+}
+
 export type {
+  BatchDetail,
   CheckoutDetail,
   ReceivableDetail,
   RecoveryAttempt,

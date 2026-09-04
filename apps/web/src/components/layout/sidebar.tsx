@@ -10,6 +10,8 @@ import {
   Sun,
   ShoppingCart,
   HandCoins,
+  Layers,
+  BellRing,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,8 @@ const navItems = [
   { to: "/checkouts", label: "Checkouts", icon: ShoppingCart },
   { to: "/receivables", label: "Receivables", icon: HandCoins },
   { to: "/deliveries", label: "Deliveries", icon: Mail },
+  { to: "/batches", label: "Batches", icon: Layers },
+  { to: "/escalations", label: "Escalations", icon: BellRing },
   { to: "/audit", label: "Audit Ledger", icon: BadgeCheck },
 ];
 

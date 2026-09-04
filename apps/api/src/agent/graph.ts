@@ -93,7 +93,7 @@ async function llmClassify(state: State): Promise<Partial<State>> {
   return { classification };
 }
 
-async function decideAction(state: State): Promise<Partial<State>> {
+export async function decideAction(state: State): Promise<Partial<State>> {
   if (state.attemptNumber >= MAX_ATTEMPTS) {
     return {
       decision: "halt",
@@ -122,6 +122,17 @@ async function decideAction(state: State): Promise<Partial<State>> {
     return {
       decision: "adjust",
       reason: `LLM recommended adjusting payment method (${classification.failureCategory})`,
+    };
+  }
+
+  if (
+    classification &&
+    classification.confidence >= 0.7 &&
+    classification.recoveryHint === "contact_support"
+  ) {
+    return {
+      decision: "escalate",
+      reason: `LLM recommended human support (${classification.failureCategory})`,
     };
   }
 

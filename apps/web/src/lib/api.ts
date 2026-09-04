@@ -21,6 +21,26 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function patch<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) {
+    throw new Error(`API error ${res.status}: ${res.statusText}`);
+  }
+  return (await res.json()) as T;
+}
+
+async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, { method: "DELETE" });
+  if (!res.ok) {
+    throw new Error(`API error ${res.status}: ${res.statusText}`);
+  }
+  return (await res.json()) as T;
+}
+
 export const api = {
   stats: () => request<{ data: import("./types").Stats }>("/stats"),
   subscriptions: (params?: Record<string, string>) => {
@@ -110,4 +130,44 @@ export const api = {
       `/receivables/${id}/mark-paid`,
       {}
     ),
+  batches: (params?: Record<string, string>) => {
+    const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return request<import("./types").Paginated<import("./types").Batch>>(
+      `/batches${qs}`
+    );
+  },
+  batch: (id: string) =>
+    request<{ data: import("./types").BatchDetail }>(`/batches/${id}`),
+  createBatch: (body: { name: string; domain: string }) =>
+    post<{ data: import("./types").Batch }>(`/batches`, body),
+  closeBatch: (id: string) =>
+    post<{ data: { id: string; status: string } }>(`/batches/${id}/close`, {}),
+  escalations: (params?: Record<string, string>) => {
+    const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return request<
+      import("./types").Paginated<import("./types").Escalation>
+    >(`/escalations${qs}`);
+  },
+  ackEscalation: (id: string, body: { status?: string; owner?: string }) =>
+    patch<{ data: import("./types").Escalation }>(
+      `/escalations/${id}`,
+      body
+    ),
+  checkEscalationSla: () =>
+    post<{
+      data: {
+        checked: number;
+        breached: Array<{ id: string; domain: string; owner: string }>;
+      };
+    }>(`/escalations/check-sla`, {}),
+  dndList: (params?: Record<string, string>) => {
+    const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return request<import("./types").Paginated<import("./types").DndEntry>>(
+      `/dnd${qs}`
+    );
+  },
+  dndAdd: (body: { email: string; reason?: string }) =>
+    post<{ data: import("./types").DndEntry }>(`/dnd`, body),
+  dndRemove: (id: string) =>
+    del<{ data: { id: string; deleted: boolean } }>(`/dnd/${id}`),
 };

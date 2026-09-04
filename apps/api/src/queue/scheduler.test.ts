@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const statusRow = vi.hoisted(() => ({ value: [] as any[] }));
+const selectQueue = vi.hoisted(() => ({ rows: [] as any[][] }));
 const decideRecovery = vi.hoisted(() => vi.fn());
 const queueAdd = vi.hoisted(() => vi.fn());
 const inserted = vi.hoisted(() => ({ values: [] as any[] }));
@@ -9,7 +9,14 @@ vi.mock("../db/index.js", () => ({
   db: {
     select: () => ({
       from: () => ({
-        where: async () => statusRow.value,
+        where: () => {
+          const rows = selectQueue.rows.shift() ?? [];
+          const chain: any = {
+            orderBy: () => ({ limit: async () => rows }),
+          };
+          chain.then = (resolve: any) => Promise.resolve(rows).then(resolve);
+          return chain;
+        },
       }),
     }),
     insert: () => ({
@@ -42,14 +49,14 @@ import { scheduleRecovery } from "./scheduler.js";
 
 describe("scheduleRecovery terminal guard", () => {
   beforeEach(() => {
-    statusRow.value = [];
+    selectQueue.rows = [];
     inserted.values = [];
     decideRecovery.mockReset();
     queueAdd.mockReset();
   });
 
   it("does not schedule when the subscription is halted", async () => {
-    statusRow.value = [{ status: "halted" }];
+    selectQueue.rows = [[{ status: "halted" }]];
 
     const decision = await scheduleRecovery({
       domain: "subscription",
@@ -70,7 +77,7 @@ describe("scheduleRecovery terminal guard", () => {
   });
 
   it("does not schedule when the subscription is cancelled", async () => {
-    statusRow.value = [{ status: "cancelled" }];
+    selectQueue.rows = [[{ status: "cancelled" }]];
 
     const decision = await scheduleRecovery({
       domain: "subscription",
@@ -85,7 +92,7 @@ describe("scheduleRecovery terminal guard", () => {
   });
 
   it("schedules normally for an active subscription", async () => {
-    statusRow.value = [{ status: "active" }];
+    selectQueue.rows = [[{ status: "active" }], []];
     const scheduledFor = new Date(Date.now() + 3600_000);
     decideRecovery.mockResolvedValue({
       allowed: true,
@@ -113,7 +120,7 @@ describe("scheduleRecovery terminal guard", () => {
   });
 
   it("does not schedule when the checkout is recovered", async () => {
-    statusRow.value = [{ status: "recovered" }];
+    selectQueue.rows = [[{ status: "recovered" }]];
 
     const decision = await scheduleRecovery({
       domain: "checkout",
@@ -134,7 +141,7 @@ describe("scheduleRecovery terminal guard", () => {
   });
 
   it("schedules normally for an abandoned checkout with owner columns", async () => {
-    statusRow.value = [{ status: "abandoned" }];
+    selectQueue.rows = [[{ status: "abandoned" }], [{ id: "b_co" }]];
     const scheduledFor = new Date(Date.now() + 30 * 60 * 1000);
     decideRecovery.mockResolvedValue({
       allowed: true,
@@ -160,12 +167,13 @@ describe("scheduleRecovery terminal guard", () => {
       subscriptionId: null,
       attemptNumber: 1,
       status: "pending",
+      batchId: "b_co",
     });
     expect(queueAdd).toHaveBeenCalledTimes(1);
   });
 
   it("does not schedule when the invoice is paid", async () => {
-    statusRow.value = [{ status: "paid" }];
+    selectQueue.rows = [[{ status: "paid" }]];
 
     const decision = await scheduleRecovery({
       domain: "receivable",
@@ -186,7 +194,7 @@ describe("scheduleRecovery terminal guard", () => {
   });
 
   it("schedules normally for an overdue invoice with owner columns", async () => {
-    statusRow.value = [{ status: "overdue" }];
+    selectQueue.rows = [[{ status: "overdue" }], []];
     const scheduledFor = new Date(Date.now());
     decideRecovery.mockResolvedValue({
       allowed: true,

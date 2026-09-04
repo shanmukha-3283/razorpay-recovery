@@ -84,18 +84,18 @@ async function seed() {
 
   // Historical recovery attempts + audit ledger for sub 3 (halted - reached cap)
   const [r1] = await sql`
-    insert into recovery_attempts (subscription_id, attempt_number, action, status, amount, details, next_attempt_at)
-    values (${s3.id}, 1, 'retry', 'completed', 19900, '{"reason":"CARD_DECLINED","note":"first retry"}', now() - interval '1 hour')
+    insert into recovery_attempts (domain, domain_id, subscription_id, attempt_number, action, status, amount, details, next_attempt_at)
+    values ('subscription', ${s3.id}, ${s3.id}, 1, 'retry', 'completed', 19900, '{"reason":"CARD_DECLINED","note":"first retry"}', now() - interval '1 hour')
     returning id
   `;
   const [r2] = await sql`
-    insert into recovery_attempts (subscription_id, attempt_number, action, status, amount, details, next_attempt_at)
-    values (${s3.id}, 2, 'retry', 'completed', 19900, '{"reason":"CARD_DECLINED","note":"second retry"}', now() - interval '24 hours')
+    insert into recovery_attempts (domain, domain_id, subscription_id, attempt_number, action, status, amount, details, next_attempt_at)
+    values ('subscription', ${s3.id}, ${s3.id}, 2, 'retry', 'completed', 19900, '{"reason":"CARD_DECLINED","note":"second retry"}', now() - interval '24 hours')
     returning id
   `;
   const [r3] = await sql`
-    insert into recovery_attempts (subscription_id, attempt_number, action, status, amount, details, next_attempt_at)
-    values (${s3.id}, 3, 'halt', 'completed', 19900, '{"reason":"cap_reached","note":"max attempts reached"}', null)
+    insert into recovery_attempts (domain, domain_id, subscription_id, attempt_number, action, status, amount, details, next_attempt_at)
+    values ('subscription', ${s3.id}, ${s3.id}, 3, 'halt', 'completed', 19900, '{"reason":"cap_reached","note":"max attempts reached"}', null)
     returning id
   `;
 
@@ -108,10 +108,10 @@ async function seed() {
 
   // Demo message deliveries so the Deliveries page is not empty.
   await sql`
-    insert into message_deliveries (subscription_id, recovery_attempt_id, channel, to_email, status, provider_message_id, error, message_body, sent_at) values
-      (${s3.id}, ${r1.id}, 'email', 'rohan@example.com', 'sent', 'seed_msg_1', null, 'Your payment of 199 INR failed. We will retry shortly.', now() - interval '1 hour'),
-      (${s3.id}, ${r2.id}, 'email', 'rohan@example.com', 'failed', null, 'Resend unreachable in demo seed', 'Your payment of 199 INR failed. Please update your payment method.', null),
-      (${s2.id}, null, 'email', 'priya@example.com', 'skipped', null, 'no drafted message for demo row', 'Demo skipped delivery row.', null)
+    insert into message_deliveries (domain, domain_id, subscription_id, recovery_attempt_id, channel, to_email, status, provider_message_id, error, message_body, sent_at) values
+      ('subscription', ${s3.id}, ${s3.id}, ${r1.id}, 'email', 'rohan@example.com', 'sent', 'seed_msg_1', null, 'Your payment of 199 INR failed. We will retry shortly.', now() - interval '1 hour'),
+      ('subscription', ${s3.id}, ${s3.id}, ${r2.id}, 'email', 'rohan@example.com', 'failed', null, 'Resend unreachable in demo seed', 'Your payment of 199 INR failed. Please update your payment method.', null),
+      ('subscription', ${s2.id}, ${s2.id}, null, 'email', 'priya@example.com', 'skipped', null, 'no drafted message for demo row', 'Demo skipped delivery row.', null)
   `;
 
   console.log("Seed complete.");
@@ -202,6 +202,49 @@ async function seed() {
         values (${touch.id}, 'remind', 480000, '{"domain":"receivable","note":"first dunning touch"}')
       `;
     }
+  }
+
+  // Demo batches (Track C): one open batch per domain, back-tagging the
+  // attempts seeded above so reporting shows measured numbers immediately.
+  for (const [name, domain] of [
+    ["seed-launch-subscriptions", "subscription"],
+    ["seed-launch-checkouts", "checkout"],
+    ["seed-launch-receivables", "receivable"],
+  ] as Array<[string, string]>) {
+    const [existingBatch] = await sql`
+      select id from recovery_batches where name = ${name}
+    `;
+    let batchId: string;
+    if (existingBatch) {
+      batchId = existingBatch.id;
+    } else {
+      const [batch] = await sql`
+        insert into recovery_batches (name, domain, status, created_by)
+        values (${name}, ${domain}, 'open', 'seed')
+        returning id
+      `;
+      batchId = batch.id;
+    }
+    await sql`
+      update recovery_attempts set batch_id = ${batchId}
+      where domain = ${domain} and batch_id is null
+    `;
+  }
+
+  // Demo DND + escalation rows.
+  await sql`
+    insert into dnd_entries (email, reason)
+    values ('stop@example.com', 'seed opt-out')
+    on conflict (email) do nothing
+  `;
+  const [existingEsc] = await sql`
+    select id from escalations where reason = 'seed: needs human review'
+  `;
+  if (!existingEsc) {
+    await sql`
+      insert into escalations (domain, reason, owner, status, sla_due)
+      values ('subscription', 'seed: needs human review', 'support-queue', 'open', now() + interval '2 days')
+    `;
   }
 
   await sql.end();

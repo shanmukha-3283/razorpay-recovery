@@ -102,6 +102,55 @@ export type ReceivableDetail = ReceivableInvoice & {
   recoveryAttempts: RecoveryAttempt[];
 };
 
+export type Batch = {
+  id: string;
+  name: string;
+  domain: string;
+  status: string;
+  createdBy: string | null;
+  createdAt: string;
+  closedAt: string | null;
+  touchedOwners: number;
+  completedTouches: number;
+  recoveredOwners: number;
+  recoveredAmount: number;
+  recoveryRate: number;
+};
+
+export type BatchAttempt = {
+  id: string;
+  domain: string;
+  domainId: string | null;
+  attemptNumber: number;
+  action: string;
+  status: string;
+  amount: number | null;
+  createdAt: string;
+};
+
+export type BatchDetail = Batch & {
+  attempts: BatchAttempt[];
+};
+
+export type Escalation = {
+  id: string;
+  domain: string;
+  ownerId: string | null;
+  reason: string | null;
+  owner: string;
+  status: string;
+  slaDue: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DndEntry = {
+  id: string;
+  email: string;
+  reason: string | null;
+  createdAt: string;
+};
+
 export type SubscriptionDetail = Subscription & {
   customerContact: string | null;
   payments: Payment[];

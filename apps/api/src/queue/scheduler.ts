@@ -1,9 +1,10 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   abandonedCheckouts,
   receivableInvoices,
   recoveryAttempts,
+  recoveryBatches,
   subscriptions,
 } from "../db/schema.js";
 import { recoveryQueue, type RecoveryJobData } from "./index.js";
@@ -107,11 +108,26 @@ export async function scheduleRecovery(
 
   const scheduledFor = decision.scheduledFor;
 
+  // Tag the attempt with the latest open batch for this domain, if any.
+  // Batches measure recovery from creation forward; closing freezes them.
+  const [openBatch] = await db
+    .select({ id: recoveryBatches.id })
+    .from(recoveryBatches)
+    .where(
+      and(
+        eq(recoveryBatches.domain, domain),
+        eq(recoveryBatches.status, "open")
+      )
+    )
+    .orderBy(desc(recoveryBatches.createdAt))
+    .limit(1);
+
   const [attempt] = await db
     .insert(recoveryAttempts)
     .values({
       domain,
       domainId: ownerId,
+      batchId: openBatch?.id ?? null,
       subscriptionId: domain === "subscription" ? ownerId : null,
       attemptNumber: decision.attemptNumber,
       action: "recovery_attempt",

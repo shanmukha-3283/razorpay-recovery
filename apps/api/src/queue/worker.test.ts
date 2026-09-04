@@ -9,6 +9,7 @@ const executeRazorpayAction = vi.hoisted(() => vi.fn());
 const sendRecoveryMessage = vi.hoisted(() => vi.fn());
 const checkoutInvoke = vi.hoisted(() => vi.fn());
 const receivableInvoke = vi.hoisted(() => vi.fn());
+const fileEscalation = vi.hoisted(() => vi.fn(async () => "esc_1"));
 
 vi.mock("../db/index.js", () => ({
   db: {
@@ -56,6 +57,11 @@ vi.mock("../agent/checkoutAgent.js", () => ({
 vi.mock("../agent/receivableAgent.js", () => ({
   receivableAgent: { invoke: receivableInvoke },
 }));
+vi.mock("../escalations.js", () => ({
+  fileEscalation,
+  checkSlaBreaches: vi.fn(),
+  isSlaBreached: vi.fn(),
+}));
 vi.mock("../delivery/index.js", () => ({ sendRecoveryMessage }));
 
 import { processRecoveryJob } from "./worker.js";
@@ -82,6 +88,8 @@ describe("processRecoveryJob", () => {
     executeRecoveryAction.mockReset();
     executeRazorpayAction.mockReset();
     sendRecoveryMessage.mockReset();
+    fileEscalation.mockReset();
+    fileEscalation.mockResolvedValue("esc_1");
   });
 
   it("records a deliberate halt as completed (not failed)", async () => {
@@ -161,6 +169,41 @@ describe("processRecoveryJob", () => {
     expect(executeRazorpayAction).not.toHaveBeenCalled();
     expect(inserted.values).toHaveLength(0);
   });
+
+  it("files an escalation on escalate decisions and audits it", async () => {
+    updateReturning.queue = [[{ id: "attempt_1" }]];
+    executeRecoveryAction.mockResolvedValue({
+      action: "escalate",
+      success: true,
+      details: {
+        reason: "LLM recommended human support",
+        message: "Support will contact you.",
+      },
+    });
+    selectRows.queue = [
+      [{ razorpaySubscriptionId: "sub_rzp_1" }],
+      [{ invoiceId: null }],
+      [{ customerId: "cus_1" }],
+      [{ email: "user@example.com" }],
+    ];
+    sendRecoveryMessage.mockResolvedValue({
+      status: "sent",
+      channel: "email",
+    });
+
+    await processRecoveryJob(job());
+
+    expect(fileEscalation).toHaveBeenCalledWith({
+      domain: "subscription",
+      ownerId: "sub_1",
+      reason: "LLM recommended human support",
+    });
+    const audit = inserted.values.find(
+      (v) => v.recoveryAttemptId === "attempt_1"
+    );
+    expect(audit).toMatchObject({ action: "escalate" });
+    expect((audit.metadata as any).escalation).toEqual({ id: "esc_1" });
+  });
 });
 
 describe("processRecoveryJob / checkout domain", () => {
@@ -185,6 +228,8 @@ describe("processRecoveryJob / checkout domain", () => {
     checkoutInvoke.mockReset();
     sendRecoveryMessage.mockReset();
     sendRecoveryMessage.mockResolvedValue({ status: "sent", channel: "email" });
+    fileEscalation.mockReset();
+    fileEscalation.mockResolvedValue("esc_9");
   });
 
   it("sends a reminder with the pay link and marks reminded", async () => {
@@ -276,6 +321,38 @@ describe("processRecoveryJob / checkout domain", () => {
     );
     expect(attemptUpdate).toMatchObject({ status: "completed" });
   });
+
+  it("files an escalation on escalate decisions", async () => {
+    updateReturning.queue = [[{ id: "attempt_co_1" }]];
+    selectRows.queue = [
+      [
+        {
+          id: "co_1",
+          razorpayOrderId: "order_9",
+          email: "buyer@example.com",
+          shortUrl: null,
+          status: "abandoned",
+        },
+      ],
+    ];
+    checkoutInvoke.mockResolvedValue({
+      decision: "escalate",
+      reason: "final escalation",
+      details: { message: "Contact support." },
+    });
+
+    await processRecoveryJob(checkoutJob());
+
+    expect(fileEscalation).toHaveBeenCalledWith({
+      domain: "checkout",
+      ownerId: "co_1",
+      reason: "final escalation",
+    });
+    const audit = inserted.values.find(
+      (v) => v.recoveryAttemptId === "attempt_co_1"
+    );
+    expect((audit.metadata as any).escalation).toEqual({ id: "esc_9" });
+  });
 });
 
 describe("processRecoveryJob / receivable domain", () => {
@@ -310,6 +387,8 @@ describe("processRecoveryJob / receivable domain", () => {
     receivableInvoke.mockReset();
     sendRecoveryMessage.mockReset();
     sendRecoveryMessage.mockResolvedValue({ status: "sent", channel: "email" });
+    fileEscalation.mockReset();
+    fileEscalation.mockResolvedValue("esc_9");
   });
 
   it("sends a band-toned reminder and completes", async () => {
@@ -362,6 +441,11 @@ describe("processRecoveryJob / receivable domain", () => {
     ).toBeDefined();
     // Promise flip targets the promise id specifically.
     expect(sendRecoveryMessage).toHaveBeenCalledTimes(1);
+    expect(fileEscalation).toHaveBeenCalledWith({
+      domain: "receivable",
+      ownerId: "inv_1",
+      reason: "promise breached",
+    });
   });
 
   it("records no-op when the invoice row is gone", async () => {

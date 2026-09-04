@@ -121,6 +121,26 @@ pnpm test        # vitest unit tests (retry cap, signature verification, actions
 | `RESEND_API_KEY`          | Email delivery; unset = stub mode         |
 | `DELIVERY_FROM_EMAIL`     | Sender for Resend                         |
 | `VITE_API_URL`            | Frontend API base (default `/api`)        |
+| `QUIET_HOURS_START/END`   | Compliance quiet window (default 21–8)    |
+| `COMPLIANCE_TZ`           | Timezone for quiet hours (default Asia/Kolkata) |
+| `COMPLIANCE_DAILY_CAP`    | Max touches/recipient/day (default 1)     |
+| `COMPLIANCE_WEEKLY_CAP`   | Max touches/recipient/week (default 3)    |
+| `ESCALATION_OWNER`        | Default escalation queue (support-queue)  |
+| `ESCALATION_SLA_HOURS`    | Escalation SLA horizon (default 48)       |
+
+## Recovery batches, compliance & escalations
+
+- **Batches** (`/batches` page): create one open batch per domain; every
+  scheduled attempt is tagged automatically. Reports show *measured* recovery
+  — only money movement observed after batch start counts (captured payments,
+  paid invoices) — plus touched owners and recovery rate. Close a batch to
+  freeze its numbers.
+- **Compliance** is enforced on every outbound email: DND list
+  (`/deliveries` page manager), quiet hours, and per-recipient frequency caps.
+  Violations are recorded as `skipped` deliveries with reasons, never dropped.
+- **Escalations** (`/escalations` page): LLM `contact_support` hints and final
+  dunning/breach touches file human review items with SLA due dates; ack,
+  resolve, or run the SLA check from the dashboard.
 
 ## Notes
 

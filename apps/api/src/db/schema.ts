@@ -95,6 +95,41 @@ export const payments = pgTable(
   })
 );
 
+export const recoveryBatches = pgTable("recovery_batches", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  domain: varchar("domain", { length: 20 }).notNull(),
+  status: varchar("status", { length: 20 }).default("open").notNull(),
+  createdBy: varchar("created_by", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  closedAt: timestamp("closed_at"),
+});
+
+export const dndEntries = pgTable(
+  "dnd_entries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    email: varchar("email", { length: 255 }).notNull(),
+    reason: varchar("reason", { length: 255 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    emailIdx: uniqueIndex("dnd_entry_email_idx").on(table.email),
+  })
+);
+
+export const escalations = pgTable("escalations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  domain: varchar("domain", { length: 20 }).notNull(),
+  ownerId: uuid("owner_id"),
+  reason: varchar("reason", { length: 500 }),
+  owner: varchar("owner", { length: 255 }).default("support-queue").notNull(),
+  status: varchar("status", { length: 20 }).default("open").notNull(),
+  slaDue: timestamp("sla_due"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const recoveryAttempts = pgTable("recovery_attempts", {
   id: uuid("id").defaultRandom().primaryKey(),
   // Polymorphic owner: subscriptions use subscriptionId (legacy) while new
@@ -103,6 +138,7 @@ export const recoveryAttempts = pgTable("recovery_attempts", {
   domain: varchar("domain", { length: 20 }).default("subscription").notNull(),
   domainId: uuid("domain_id"),
   subscriptionId: uuid("subscription_id").references(() => subscriptions.id),
+  batchId: uuid("batch_id").references(() => recoveryBatches.id),
   attemptNumber: integer("attempt_number").notNull(),
   action: varchar("action", { length: 100 }).notNull(),
   status: varchar("status", { length: 50 }).default("pending").notNull(),

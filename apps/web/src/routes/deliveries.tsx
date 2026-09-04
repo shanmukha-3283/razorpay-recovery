@@ -3,9 +3,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useDeliveries } from "@/service/hooks";
-import type { Delivery } from "@/lib/types";
+import { Input } from "@/components/ui/input";
+import {
+  useAddDnd,
+  useDeliveries,
+  useDnd,
+  useRemoveDnd,
+} from "@/service/hooks";
+import type { Delivery, DndEntry } from "@/lib/types";
 import { formatDateTime } from "@/lib/utils";
 
 export const Route = createFileRoute("/deliveries")({
@@ -126,6 +133,87 @@ function DeliveriesPage() {
           />
         </CardContent>
       </Card>
+
+      <DndManager />
     </div>
+  );
+}
+
+function DndManager() {
+  const { data } = useDnd({ page: "1" });
+  const addMutation = useAddDnd();
+  const removeMutation = useRemoveDnd();
+  const [email, setEmail] = useState("");
+
+  const columns: ColumnDef<DndEntry, unknown>[] = [
+    { header: "Email", accessorKey: "email" },
+    {
+      header: "Reason",
+      accessorKey: "reason",
+      cell: ({ getValue }) => (getValue() as string) ?? "—",
+    },
+    {
+      header: "Added",
+      accessorKey: "createdAt",
+      cell: ({ getValue }) => formatDateTime(getValue() as string),
+    },
+    {
+      header: "",
+      accessorKey: "id",
+      cell: ({ row }) => (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={removeMutation.isPending}
+          onClick={() => removeMutation.mutate(row.original.id)}
+        >
+          Remove
+        </Button>
+      ),
+    },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">
+          Do-not-disturb list ({data?.meta.total ?? 0})
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label className="text-xs text-muted-foreground">Email</label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="stop@example.com"
+            />
+          </div>
+          <Button
+            size="sm"
+            disabled={!email.trim() || addMutation.isPending}
+            onClick={() => {
+              addMutation.mutate({ email: email.trim() });
+              setEmail("");
+            }}
+          >
+            {addMutation.isPending ? "Adding…" : "Add to DND"}
+          </Button>
+          {addMutation.isError && (
+            <p className="text-sm text-destructive">
+              {addMutation.error.message}
+            </p>
+          )}
+        </div>
+        <DataTable<DndEntry>
+          columns={columns}
+          data={data?.data ?? []}
+          meta={data?.meta}
+          onPageChange={() => {}}
+        />
+      </CardContent>
+    </Card>
   );
 }

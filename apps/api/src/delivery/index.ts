@@ -1,6 +1,7 @@
 import { db } from "../db/index.js";
 import { messageDeliveries } from "../db/schema.js";
 import type { RecoveryDomain } from "../queue/retryPolicy.js";
+import { checkCompliance } from "./compliance.js";
 import { sendEmail } from "./email.js";
 
 export type SendRecoveryMessageInput = {
@@ -48,8 +49,21 @@ export async function sendRecoveryMessage(
     return { status: "skipped", channel: "email" };
   }
 
+  // Normalize once so DND + frequency counts match stored rows.
+  const toEmail = input.toEmail.trim().toLowerCase();
+
+  // Compliance gate: violations skip the send but are recorded + audited
+  // by the caller, never silently dropped.
+  const verdict = await checkCompliance(toEmail);
+  if (!verdict.ok) {
+    await createDelivery({ ...input, toEmail }, "skipped", {
+      error: verdict.reason,
+    });
+    return { status: "skipped", channel: "email", error: verdict.reason };
+  }
+
   const result = await sendEmail({
-    to: input.toEmail,
+    to: toEmail,
     message: input.message,
   });
 

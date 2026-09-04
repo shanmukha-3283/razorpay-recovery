@@ -4,13 +4,21 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
+  useAckEscalation,
+  useAddDnd,
+  useBatch,
+  useBatches,
   useCheckout,
   useCheckouts,
+  useCloseBatch,
+  useCreateBatch,
+  useEscalations,
   useManualRecovery,
   useMarkInvoicePaid,
   useReceivable,
   useReceivables,
   useRecordPromise,
+  useRemoveDnd,
   useSubscription,
   useSubscriptionSync,
 } from "./hooks";
@@ -26,6 +34,16 @@ vi.mock("@/lib/api", () => ({
     receivable: vi.fn(),
     recordPromise: vi.fn(),
     markInvoicePaid: vi.fn(),
+    batches: vi.fn(),
+    batch: vi.fn(),
+    createBatch: vi.fn(),
+    closeBatch: vi.fn(),
+    escalations: vi.fn(),
+    ackEscalation: vi.fn(),
+    checkEscalationSla: vi.fn(),
+    dndList: vi.fn(),
+    dndAdd: vi.fn(),
+    dndRemove: vi.fn(),
   },
 }));
 
@@ -188,5 +206,71 @@ describe("data hooks", () => {
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["receivable"] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["receivables"] });
+  });
+
+  it("useBatches/useBatch read and create/close invalidate", async () => {
+    mockedApi.batches.mockResolvedValue({
+      data: [],
+      meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
+    } as never);
+    mockedApi.batch.mockResolvedValue({ data: { id: "b_1" } } as never);
+    mockedApi.createBatch.mockResolvedValue({ data: { id: "b_2" } } as never);
+    mockedApi.closeBatch.mockResolvedValue({ data: {} } as never);
+    const { wrapper, invalidateSpy } = setup();
+
+    const detail = renderHook(() => useBatch("b_1"), { wrapper });
+    await waitFor(() => expect(detail.result.current.isSuccess).toBe(true));
+    expect(detail.result.current.data).toEqual({ id: "b_1" });
+    expect(mockedApi.batch).toHaveBeenCalledWith("b_1");
+
+    const list = renderHook(() => useBatches({ page: "1" }), { wrapper });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    expect(mockedApi.batches).toHaveBeenCalledWith({ page: "1" });
+
+    const create = renderHook(() => useCreateBatch(), { wrapper });
+    create.result.current.mutate({ name: "w36", domain: "subscription" });
+    await waitFor(() => expect(create.result.current.isSuccess).toBe(true));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["batches"] });
+
+    const close = renderHook(() => useCloseBatch(), { wrapper });
+    close.result.current.mutate("b_1");
+    await waitFor(() => expect(close.result.current.isSuccess).toBe(true));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["batch"] });
+  });
+
+  it("useEscalations reads and ack invalidates", async () => {
+    mockedApi.escalations.mockResolvedValue({
+      data: [],
+      meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
+    } as never);
+    mockedApi.ackEscalation.mockResolvedValue({ data: {} } as never);
+    const { wrapper, invalidateSpy } = setup();
+
+    const list = renderHook(() => useEscalations({ status: "open" }), {
+      wrapper,
+    });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    expect(mockedApi.escalations).toHaveBeenCalledWith({ status: "open" });
+
+    const ack = renderHook(() => useAckEscalation(), { wrapper });
+    ack.result.current.mutate({ id: "esc_1", body: { status: "acked" } });
+    await waitFor(() => expect(ack.result.current.isSuccess).toBe(true));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["escalations"] });
+  });
+
+  it("useAddDnd/useRemoveDnd invalidate the DND cache", async () => {
+    mockedApi.dndAdd.mockResolvedValue({ data: {} } as never);
+    mockedApi.dndRemove.mockResolvedValue({ data: {} } as never);
+    const { wrapper, invalidateSpy } = setup();
+
+    const add = renderHook(() => useAddDnd(), { wrapper });
+    add.result.current.mutate({ email: "stop@example.com" });
+    await waitFor(() => expect(add.result.current.isSuccess).toBe(true));
+
+    const remove = renderHook(() => useRemoveDnd(), { wrapper });
+    remove.result.current.mutate("dnd_1");
+    await waitFor(() => expect(remove.result.current.isSuccess).toBe(true));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["dnd"] });
   });
 });

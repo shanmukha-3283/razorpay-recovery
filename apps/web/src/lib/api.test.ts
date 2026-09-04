@@ -103,6 +103,54 @@ describe("api client", () => {
     );
   });
 
+  it("GETs batches list and detail", async () => {
+    const fetchFn = mockFetchOnce({ data: [], meta: {} });
+    await api.batches({ page: "1" });
+    const url = fetchFn.mock.calls[0][0];
+    expect(url.startsWith("/api/batches?")).toBe(true);
+    await api.batch("b_1");
+    expect(fetchFn).toHaveBeenCalledWith("/api/batches/b_1");
+  });
+
+  it("POSTs batch create/close and SLA check", async () => {
+    const fetchFn = mockFetchOnce({ data: {} });
+    await api.createBatch({ name: "w36", domain: "subscription" });
+    expect(fetchFn).toHaveBeenCalledWith(
+      "/api/batches",
+      expect.objectContaining({ method: "POST" })
+    );
+    await api.closeBatch("b_1");
+    expect(fetchFn).toHaveBeenCalledWith(
+      "/api/batches/b_1/close",
+      expect.objectContaining({ method: "POST" })
+    );
+    await api.checkEscalationSla();
+    expect(fetchFn).toHaveBeenCalledWith(
+      "/api/escalations/check-sla",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("PATCHes escalations and manages DND", async () => {
+    const fetchFn = mockFetchOnce({ data: {} });
+    await api.ackEscalation("esc_1", { status: "acked" });
+    const patchCall = fetchFn.mock.calls.find((c) =>
+      String(c[0]).includes("/escalations/esc_1")
+    );
+    expect(patchCall?.[1]).toMatchObject({ method: "PATCH" });
+
+    await api.dndAdd({ email: "stop@example.com" });
+    expect(fetchFn).toHaveBeenCalledWith(
+      "/api/dnd",
+      expect.objectContaining({ method: "POST" })
+    );
+    await api.dndRemove("dnd_1");
+    const delCall = fetchFn.mock.calls.find((c) =>
+      String(c[0]).includes("/dnd/dnd_1")
+    );
+    expect(delCall?.[1]).toMatchObject({ method: "DELETE" });
+  });
+
   it("throws on non-OK responses", async () => {
     mockFetchOnce({}, false, 500);
     await expect(api.stats()).rejects.toThrow("API error 500");
