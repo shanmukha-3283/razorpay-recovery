@@ -196,8 +196,10 @@ managed Postgres, and managed Key Value (Redis).
 1. Dashboard → New → Blueprint → select this repo.
 2. Fill every `sync: false` secret: Razorpay keys + webhook secret, `GOOGLE_API_KEY`
    (with `LLM_PROVIDER=gemini` pre-set), `RESEND_API_KEY` + `DELIVERY_FROM_EMAIL`.
-3. Deploy. Run migrations once against the managed DB:
-   `DATABASE_URL=<render-postgres-url> pnpm --filter @razorpay-recovery/api db:migrate`
+3. Deploy. The API image runs pending migrations itself on every boot, so a
+   fresh managed DB self-initializes (verify in deploy logs:
+   "DB migrations applied successfully"). For an existing DB, migrations are
+   a safe no-op — no manual step needed.
 4. Register the public API URL (`https://<api-service>.onrender.com/webhooks/razorpay`)
    in the Razorpay dashboard and fire a test event.
 5. Open the web service URL — the dashboard talks to the API through the
