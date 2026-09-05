@@ -9,6 +9,9 @@ Monorepo (pnpm + turbo):
 - `apps/api` — Hono + TypeScript backend
 - `apps/web` — React + Vite dashboard (shadcn-admin)
 
+New operator? Start with [`USER_GUIDE.md`](USER_GUIDE.md) — click-by-click
+instructions for recovering revenue and reading the scoreboard.
+
 ## Architecture
 
 ```mermaid
@@ -37,7 +40,7 @@ flowchart LR
 | Checkout abandonment recovery | `routes/checkouts.ts`, `agent/checkoutAgent.ts`, Checkouts pages | simulator + 30-min grace + pay-link email |
 | Overdue receivables + promises | `routes/receivables.ts`, `agent/receivableAgent.ts`, Receivables pages | CSV import, promise/breach flows, seed bands |
 | Right intervention via AI | `agent/*`, `llmService.ts` | `failureCategory` chips + reasons rendered in UI |
-| Bounded workflows + stopping rules | `queue/retryPolicy.ts` (3/72h, 2/48h, 4/30d) | 200 tests (140 API + 60 web) incl. cap/boundary tests |
+| Bounded workflows + stopping rules | `queue/retryPolicy.ts` (3/72h, 2/48h, 4/30d) | 210 tests (150 API + 60 web) incl. cap/boundary tests |
 | Measured money per batch | `routes/batches.ts`, Batches pages | recovered-$ counts only post-batch money movement |
 | Compliant escalation | `delivery/compliance.ts`, DND, escalations queue | skipped-with-reason rows, SLA tracking |
 | Audit trail | `audit_ledger` on every worker path | Audit page with metadata viewer |
@@ -143,7 +146,7 @@ provider (no `RESEND_API_KEY`, nothing is sent).
 ## Tests
 
 ```bash
-pnpm test        # vitest unit tests — 200 total (140 API + 60 web)
+pnpm test        # vitest unit tests — 210 total (150 API + 60 web)
                      #   (retry cap, signature verification, actions, agent fallback)
 ```
 
