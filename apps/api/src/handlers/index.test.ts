@@ -111,6 +111,53 @@ describe("dispatchWebhookEvent / getEntity", () => {
     expect(scheduleRecovery).not.toHaveBeenCalled();
   });
 
+  it("unwraps the real Razorpay nested entity object", async () => {
+    lookupSub.mockReturnValue([{ id: "internal-sub-nested" }]);
+    syncPayment.mockResolvedValue("pay-id");
+
+    const payload = {
+      payload: {
+        payment: {
+          entity: {
+            entity: "payment",
+            id: "pay_nested",
+            order_id: "order_nested",
+            invoice_id: null,
+            amount: 34900,
+            currency: "INR",
+            status: "failed",
+            method: "upi",
+            error_code: "BAD_UPI_HANDLE",
+            error_description: "Invalid UPI handle",
+            subscription_id: "sub_rzp_nested",
+          },
+        },
+      },
+    };
+
+    const ok = await dispatchWebhookEvent("payment.failed", {
+      payload: payload.payload,
+      rawEventId: "raw_nested",
+    });
+
+    expect(ok).toBe(true);
+    expect(syncPayment).toHaveBeenCalledWith(
+      "pay_nested",
+      expect.objectContaining({
+        subscriptionId: "internal-sub-nested",
+        amount: 34900,
+        errorCode: "BAD_UPI_HANDLE",
+        status: "failed",
+      })
+    );
+    expect(scheduleRecovery).toHaveBeenCalledWith({
+      domain: "subscription",
+      ownerId: "internal-sub-nested",
+      amount: 34900,
+      currency: "INR",
+    });
+  });
+
   it("passes the customer name from subscription payloads into syncCustomer", async () => {
     const payload = {
       subscription: {

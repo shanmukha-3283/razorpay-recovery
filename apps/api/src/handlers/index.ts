@@ -14,12 +14,18 @@ type HandlerContext = {
 type WebhookHandler = (ctx: HandlerContext) => Promise<void>;
 
 function getEntity<T>(payload: WebhookPayload, key: string): T | undefined {
-  // Razorpay webhook payloads nest the entity object under the key, e.g.
-  // payload.payment = { entity: "payment", id: "pay_...", ... }. The object
-  // itself is what handlers need, not the ".entity" string marker.
-  const holder = payload[key] as T | undefined;
-  if (holder) return holder;
-  return undefined;
+  // Razorpay webhook payloads nest the entity object under the key:
+  //   payload.payment.entity = { id, ..., subscription_id }
+  // The ".entity" object is what handlers need. Some older/simpler payloads
+  // carry the fields flat alongside an entity STRING marker, so unwrap the
+  // nested object only when it is actually an object.
+  const holder = payload[key] as
+    | (T & { entity?: unknown })
+    | undefined;
+  if (holder && typeof holder.entity === "object" && holder.entity !== null) {
+    return holder.entity as T;
+  }
+  return holder;
 }
 
 async function handlePaymentFailed({ payload }: HandlerContext) {
