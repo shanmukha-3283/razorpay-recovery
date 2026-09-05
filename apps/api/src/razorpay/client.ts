@@ -1,7 +1,7 @@
 const RAZORPAY_BASE = "https://api.razorpay.com/v1";
 
-const keyId = process.env.RAZORPAY_KEY_ID;
-const keySecret = process.env.RAZORPAY_KEY_SECRET;
+const keyId = () => process.env.RAZORPAY_KEY_ID ?? "";
+const keySecret = () => process.env.RAZORPAY_KEY_SECRET ?? "";
 
 export class RazorpayApiError extends Error {
   constructor(
@@ -53,7 +53,7 @@ export type RazorpayInvoice = {
 type RazorpayResponse<T> = { data?: T; error?: { code: string; description: string } };
 
 function hasCredentials(): boolean {
-  return Boolean(keyId && keySecret);
+  return Boolean(keyId() && keySecret());
 }
 
 async function request<T>(
@@ -66,7 +66,7 @@ async function request<T>(
   }
 
   const headers: Record<string, string> = {
-    Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`,
+    Authorization: `Basic ${Buffer.from(`${keyId()}:${keySecret()}`).toString("base64")}`,
   };
 
   let options: RequestInit = { method, headers };
