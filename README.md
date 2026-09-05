@@ -60,6 +60,9 @@ flowchart LR
 - Every recovery action writes a row to `audit_ledger` (action, amount, timestamp).
 - Retries are capped at **3 attempts / 72h** — enforced in code (`retryPolicy.ts`).
 - All Razorpay webhooks are signature-verified — no exceptions.
+- Dashboard reads are open; every state-changing API call requires a bearer
+  token (`DASHBOARD_API_TOKEN`), enforced fail-closed in
+  `middleware/mutationAuth.ts`.
 
 ## Prerequisites
 

@@ -1,8 +1,27 @@
 const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "/api";
 
+const API_TOKEN =
+  (import.meta.env.VITE_DASHBOARD_API_TOKEN as string | undefined) ?? "";
+
+/** Shared init: Bearer header when a dashboard token is configured. */
+export function authedInit(
+  init?: RequestInit,
+  token: string = API_TOKEN
+): RequestInit | undefined {
+  if (!token) return init;
+  return {
+    ...init,
+    headers: {
+      ...(init?.headers as Record<string, string> | undefined),
+      Authorization: `Bearer ${token}`,
+    },
+  };
+}
+
 async function request<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`);
+  const init = authedInit();
+  const res = await fetch(`${API_URL}${path}`, ...(init ? [init] : []));
   if (!res.ok) {
     throw new Error(`API error ${res.status}: ${res.statusText}`);
   }
@@ -10,11 +29,12 @@ async function request<T>(path: string): Promise<T> {
 }
 
 async function post<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
+  const init = authedInit({
     method: "POST",
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+  const res = await fetch(`${API_URL}${path}`, ...(init ? [init] : []));
   if (!res.ok) {
     throw new Error(`API error ${res.status}: ${res.statusText}`);
   }
@@ -22,11 +42,12 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
 }
 
 async function patch<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
+  const init = authedInit({
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body ?? {}),
   });
+  const res = await fetch(`${API_URL}${path}`, ...(init ? [init] : []));
   if (!res.ok) {
     throw new Error(`API error ${res.status}: ${res.statusText}`);
   }
@@ -34,7 +55,8 @@ async function patch<T>(path: string, body?: unknown): Promise<T> {
 }
 
 async function del<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { method: "DELETE" });
+  const init = authedInit({ method: "DELETE" });
+  const res = await fetch(`${API_URL}${path}`, ...(init ? [init] : []));
   if (!res.ok) {
     throw new Error(`API error ${res.status}: ${res.statusText}`);
   }
@@ -61,11 +83,15 @@ export const api = {
     id: string,
     body?: { amount?: number; currency?: string }
   ) => {
-    const res = await fetch(`${API_URL}/subscriptions/${id}/recover`, {
+    const init = authedInit({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body ?? {}),
     });
+    const res = await fetch(
+      `${API_URL}/subscriptions/${id}/recover`,
+      ...(init ? [init] : [])
+    );
     const json = (await res.json()) as
       | { data: import("./types").RecoverResult }
       | { error: string; scheduled: false; reason: string };

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api } from "./api";
+import { api, authedInit } from "./api";
 
 function mockFetchOnce(json: unknown, ok = true, status = 200) {
   const fn = vi.fn(
@@ -17,6 +17,32 @@ function mockFetchOnce(json: unknown, ok = true, status = 200) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("authedInit", () => {
+  it("returns init untouched when no token is configured", () => {
+    expect(authedInit(undefined, "")).toBeUndefined();
+    const init = { method: "GET" } as RequestInit;
+    expect(authedInit(init, "")).toBe(init);
+  });
+
+  it("attaches the Bearer header and preserves existing headers", () => {
+    expect(authedInit(undefined, "tok")).toEqual({
+      headers: { Authorization: "Bearer tok" },
+    });
+    expect(
+      authedInit(
+        { method: "POST", headers: { "Content-Type": "application/json" } },
+        "tok"
+      )
+    ).toEqual({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer tok",
+      },
+    });
+  });
 });
 
 describe("api client", () => {

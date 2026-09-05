@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { corsMiddleware } from "./middleware/cors.js";
+import { mutationAuth } from "./middleware/mutationAuth.js";
 import webhooks from "./routes/webhooks.js";
 import subscriptionsRoute from "./routes/subscriptions.js";
 import eventsRoute from "./routes/events.js";
@@ -16,6 +17,7 @@ import escalationsRoute from "./routes/escalations.js";
 import dndRoute from "./routes/dnd.js";
 import { startWorker, closeWorker } from "./queue/worker.js";
 import { resetStaleAttempts } from "./queue/sweep.js";
+import { startSweeps, stopSweeps } from "./queue/sweeps.js";
 import { closeQueue } from "./queue/index.js";
 import { closeDb } from "./db/index.js";
 
@@ -23,6 +25,7 @@ const app = new Hono();
 
 app.use("*", logger());
 app.use("/api/*", corsMiddleware());
+app.use("/api/*", mutationAuth);
 
 app.get("/health", (c) => {
   return c.json({ status: "ok", timestamp: new Date().toISOString() });
@@ -49,10 +52,12 @@ startWorker();
 resetStaleAttempts().catch((err) => {
   console.error("Startup sweep failed:", err);
 });
+startSweeps();
 
 async function shutdown(signal: string) {
   console.log(`Received ${signal}; shutting down.`);
   try {
+    stopSweeps();
     await closeWorker();
     await closeQueue();
     await closeDb();
