@@ -49,27 +49,20 @@ services:
 
   - type: web
     name: razorpay-recovery-web
-    runtime: docker
-    dockerfilePath: ./apps/web/Dockerfile
-    plan: free
-    # Baked at Vite build time: the browser calls the public API directly,
-    # bypassing the nginx /api proxy (which needs private-network env that
-    # manual dashboard deploys don't provide).
-    dockerBuildArgs:
-      VITE_API_URL: https://razorpay-recovery-api-0qtm.onrender.com/api
+    runtime: static
+    buildCommand: export COREPACK_HOME=/tmp/corepack-home && corepack prepare pnpm@9.0.0 --activate && pnpm install --frozen-lockfile --filter @razorpay-recovery/web... && pnpm --filter @razorpay-recovery/web build
+    staticPublishPath: ./apps/web/dist
     envVars:
-      # Private-network backend address; the entrypoint renders these
-      # into the nginx /api reverse proxy at container start.
-      - key: API_HOST
-        fromService:
-          type: web
-          name: razorpay-recovery-api
-          property: host
-      - key: API_PORT
-        fromService:
-          type: web
-          name: razorpay-recovery-api
-          property: port
+      - key: NODE_VERSION
+        value: "24"
+      # Baked at Vite build time (plain env vars are available to static
+      # builds): the browser calls the public API directly.
+      - key: VITE_API_URL
+        value: https://razorpay-recovery-api-0qtm.onrender.com/api
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
 
   - type: keyvalue
     name: razorpay-recovery-redis
