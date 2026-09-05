@@ -27,7 +27,7 @@ export function getLLM(): BaseChatModel {
     });
   } else if (provider === "gemini") {
     cachedLLM = new ChatGoogleGenerativeAI({
-      model: process.env.GEMINI_MODEL ?? "gemini-2.0-flash",
+      model: process.env.GEMINI_MODEL ?? "gemini-3.6-flash",
       apiKey: process.env.GOOGLE_API_KEY,
       temperature: 0,
     });
