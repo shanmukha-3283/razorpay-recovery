@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, Outlet, createFileRoute, useMatch } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,10 @@ const statusVariant = (s: string): "default" | "success" | "warning" | "destruct
 
 function CheckoutsPage() {
   const [page, setPage] = useState(1);
+  const detailMatch = useMatch({
+    from: "/checkouts/$id",
+    shouldThrow: false,
+  });
   const { data, isLoading } = useCheckouts({ page: String(page) });
 
   const columns: ColumnDef<Checkout, unknown>[] = [
@@ -70,6 +74,16 @@ function CheckoutsPage() {
       cell: ({ getValue }) => formatDateTime(getValue() as string),
     },
   ];
+
+  // Nested detail route (/checkouts/$id) renders through this
+  // component's Outlet — show only the detail when it matches.
+  if (detailMatch) {
+    return (
+      <div className="space-y-6">
+        <Outlet />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
