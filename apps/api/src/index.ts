@@ -31,6 +31,29 @@ app.get("/health", (c) => {
   return c.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+app.get("/", (c) => {
+  return c.json({
+    service: "razorpay-recovery-api",
+    status: "ok",
+    docs: "Use the dashboard web service for the UI.",
+    health: "/health",
+    api: [
+      "/api/webhooks",
+      "/api/subscriptions",
+      "/api/events",
+      "/api/recovery-attempts",
+      "/api/audit-ledger",
+      "/api/stats",
+      "/api/deliveries",
+      "/api/checkouts",
+      "/api/receivables",
+      "/api/batches",
+      "/api/escalations",
+      "/api/dnd",
+    ],
+  });
+});
+
 app.route("/api/webhooks", webhooks);
 app.route("/api/subscriptions", subscriptionsRoute);
 app.route("/api/events", eventsRoute);
