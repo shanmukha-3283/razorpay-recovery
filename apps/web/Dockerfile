@@ -17,6 +17,11 @@ COPY apps/web apps/web
 # through the nginx /api proxy (local compose path).
 ARG VITE_API_URL=https://razorpay-recovery-api-0qtm.onrender.com/api
 ENV VITE_API_URL=${VITE_API_URL}
+# Token baked at build time so the dashboard always sends a bearer the API
+# recognizes; Render doesn't inject VITE_* into the docker build env, so the
+# value is pinned here to match the API service's DASHBOARD_API_TOKEN.
+ARG VITE_DASHBOARD_API_TOKEN=8a95b442efd3855a4191568b9a51f145
+ENV VITE_DASHBOARD_API_TOKEN=${VITE_DASHBOARD_API_TOKEN}
 RUN pnpm --filter @razorpay-recovery/web build
 
 # ---- Runtime: nginx serving static assets + /api reverse proxy ----
