@@ -5,7 +5,7 @@
 - DB: Postgres + Drizzle ORM
 - Queue: Redis + BullMQ for retry scheduling
 - Agent: LangGraph (StateGraph) for the decision loop
-- LLM: Claude API (classification fallback + message drafting)
+- LLM: Claude / Ollama / Gemini via LLM_PROVIDER (classification fallback + message drafting); Gemini in production
 - Frontend: React + Vite, based on shadcn-admin, in apps/web
 
 ## Hard requirements (non-negotiable)

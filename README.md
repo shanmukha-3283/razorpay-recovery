@@ -37,7 +37,7 @@ flowchart LR
 | Checkout abandonment recovery | `routes/checkouts.ts`, `agent/checkoutAgent.ts`, Checkouts pages | simulator + 30-min grace + pay-link email |
 | Overdue receivables + promises | `routes/receivables.ts`, `agent/receivableAgent.ts`, Receivables pages | CSV import, promise/breach flows, seed bands |
 | Right intervention via AI | `agent/*`, `llmService.ts` | `failureCategory` chips + reasons rendered in UI |
-| Bounded workflows + stopping rules | `queue/retryPolicy.ts` (3/72h, 2/48h, 4/30d) | 155-test suite incl. cap/boundary tests |
+| Bounded workflows + stopping rules | `queue/retryPolicy.ts` (3/72h, 2/48h, 4/30d) | 200 tests (140 API + 60 web) incl. cap/boundary tests |
 | Measured money per batch | `routes/batches.ts`, Batches pages | recovered-$ counts only post-batch money movement |
 | Compliant escalation | `delivery/compliance.ts`, DND, escalations queue | skipped-with-reason rows, SLA tracking |
 | Audit trail | `audit_ledger` on every worker path | Audit page with metadata viewer |
@@ -50,7 +50,7 @@ flowchart LR
 | DB         | Postgres + Drizzle ORM                   |
 | Queue      | Redis + BullMQ (retry scheduling)        |
 | Agent      | LangGraph (StateGraph decision loop)     |
-| LLM        | Claude (or Ollama) classification/drafting |
+| LLM        | Claude / Ollama / Gemini via `LLM_PROVIDER` (Gemini in production) |
 | Delivery   | Resend (email)                           |
 | Frontend   | React + Vite + shadcn-admin              |
 
@@ -118,9 +118,12 @@ Notes:
 - Inside compose, `DATABASE_URL`/`REDIS_URL` are overridden to the `db`/`redis`
   service names automatically; your `.env` localhost values only apply to
   host-run processes.
-- `VITE_API_URL` is baked at web **build** time. Leave it unset (default `/api`)
-  for the compose setup; pass `--build-arg VITE_API_URL=https://<host>/api`
-  only when the frontend is served from a different origin than the API.
+- `VITE_API_URL` and `VITE_DASHBOARD_API_TOKEN` are baked at web **build**
+  time (see `apps/web/Dockerfile`). Override with `--build-arg
+  VITE_API_URL=...`/`VITE_DASHBOARD_API_TOKEN=...` — most useful for
+  split-origin deployments where the dashboard calls the API across origins.
+  In the compose setup both default to same-origin (`/api` proxied through
+  nginx), which needs no token value at all.
 - CI (`.github/workflows/ci.yml`) runs `test` / `typecheck` / `build` plus a
   `docker build` smoke step on every push and PR.
 
@@ -140,7 +143,8 @@ provider (no `RESEND_API_KEY`, nothing is sent).
 ## Tests
 
 ```bash
-pnpm test        # vitest unit tests (retry cap, signature verification, actions)
+pnpm test        # vitest unit tests — 200 total (140 API + 60 web)
+                     #   (retry cap, signature verification, actions, agent fallback)
 ```
 
 ## Environment variables (`.env`)
@@ -151,12 +155,23 @@ pnpm test        # vitest unit tests (retry cap, signature verification, actions
 | `REDIS_URL`               | Redis connection string (BullMQ)          |
 | `RAZORPAY_WEBHOOK_SECRET` | Webhook signature secret                  |
 | `RAZORPAY_KEY_ID/SECRET`  | Razorpay API credentials (actions)        |
-| `LLM_PROVIDER`            | `claude` or `ollama`                      |
+| `PORT`                    | API listen port (default 3000)            |
+| `LLM_PROVIDER`            | `claude`, `ollama`, or `gemini`           |
 | `ANTHROPIC_API_KEY`       | Required when `LLM_PROVIDER=claude`       |
+| `CLAUDE_MODEL`            | Claude model (default `claude-haiku-4-5`) |
 | `OLLAMA_MODEL/BASE_URL`   | Ollama settings                           |
+| `GOOGLE_API_KEY`          | Required when `LLM_PROVIDER=gemini`       |
+| `GEMINI_MODEL`            | Gemini model (default `gemini-3.6-flash`) |
 | `RESEND_API_KEY`          | Email delivery; unset = stub mode         |
+| `DELIVERY_PROVIDER`       | Delivery provider (default `resend`)      |
 | `DELIVERY_FROM_EMAIL`     | Sender for Resend                         |
-| `VITE_API_URL`            | Frontend API base (default `/api`)        |
+| `VITE_API_URL`            | Frontend API base (baked at build)        |
+| `VITE_DASHBOARD_API_TOKEN`| Bearer token baked into the web build     |
+| `DASHBOARD_API_TOKEN`     | Bearer token enforced by the API (must match `VITE_DASHBOARD_API_TOKEN`) |
+| `WEB_ORIGIN`              | Allowed CORS origin for split-origin browser → API calls |
+| `API_URL`                 | Base URL the simulator scripts POST to    |
+| `SIM_SUBSCRIPTION_ID`     | Subscription the webhook simulator targets |
+| `SWEEP_INTERVAL_MIN`      | Recovery sweep interval (default 60)      |
 | `QUIET_HOURS_START/END`   | Compliance quiet window (default 21–8)    |
 | `COMPLIANCE_TZ`           | Timezone for quiet hours (default Asia/Kolkata) |
 | `COMPLIANCE_DAILY_CAP`    | Max touches/recipient/day (default 1)     |
@@ -202,8 +217,19 @@ managed Postgres, and managed Key Value (Redis).
    a safe no-op — no manual step needed.
 4. Register the public API URL (`https://<api-service>.onrender.com/webhooks/razorpay`)
    in the Razorpay dashboard and fire a test event.
-5. Open the web service URL — the dashboard talks to the API through the
-   nginx `/api` proxy, so no extra CORS or frontend config is needed.
+5. Open the web service URL.
+
+Deployed topology (what `render.yaml` builds):
+
+- The **web image bakes the public API URL** (`VITE_API_URL=...` in
+  `apps/web/Dockerfile`) and the dashboard token at build time, so the
+  browser calls the API **cross-origin** — exactly what's running on the
+  live demo.
+- `WEB_ORIGIN` is set on the API to allow that cross-origin browser → API
+  traffic (see the CORS middleware); point it at the public web URL.
+- The nginx `/api` reverse proxy still exists in the web image and is used
+  for the same-origin path (local/compose). In the split-origin deployment
+  the browser bypasses it — CORS + `WEB_ORIGIN` are the tuning knobs.
 
 Caveats for evaluation use: free-tier Postgres sleeps and Key Value is
 ephemeral — fine for judging, not for production data. Set `WEB_ORIGIN` only
