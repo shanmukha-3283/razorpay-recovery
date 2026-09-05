@@ -10,10 +10,12 @@ RUN pnpm install --frozen-lockfile --filter @razorpay-recovery/web...
 
 COPY apps/web apps/web
 
-# VITE_API_URL is baked at build time. Leave unset (default "/api") so the
-# browser uses same-origin requests served through the nginx /api proxy.
-# Override with --build-arg VITE_API_URL=https://<host>/api when needed.
-ARG VITE_API_URL
+# VITE_API_URL is baked at build time. Default points at the public API so
+# Render deploys (which can't take build args via Blueprint) work with zero
+# dashboard configuration; override with --build-arg for other environments.
+# Leave empty (VITE_API_URL=) to fall back to same-origin "/api" served
+# through the nginx /api proxy (local compose path).
+ARG VITE_API_URL=https://razorpay-recovery-api-0qtm.onrender.com/api
 ENV VITE_API_URL=${VITE_API_URL}
 RUN pnpm --filter @razorpay-recovery/web build
 
