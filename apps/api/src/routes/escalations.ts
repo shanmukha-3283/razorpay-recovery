@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { escalations } from "../db/schema.js";
 import { parsePagination, paginationMeta } from "./pagination.js";
+import { clampString, parseJsonBody } from "./validation.js";
 import { checkSlaBreaches } from "../escalations.js";
 
 const escalationsRoute = new Hono();
@@ -39,15 +40,17 @@ escalationsRoute.get("/", async (c) => {
 escalationsRoute.patch("/:id", async (c) => {
   const id = c.req.param("id");
 
-  let body: { status?: string; owner?: string };
-  try {
-    body = (await c.req.json()) as typeof body;
-  } catch {
-    return c.json({ error: "Invalid JSON body" }, 400);
-  }
+  const parsed = await parseJsonBody<{ status?: string; owner?: string }>(c);
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+  const body = parsed.value;
 
   if (body.status && !["open", "acked", "resolved"].includes(body.status)) {
     return c.json({ error: "status must be open, acked, or resolved" }, 400);
+  }
+  const owner: string | undefined =
+    body.owner === undefined ? undefined : clampString(body.owner, 255) ?? undefined;
+  if (body.owner !== undefined && owner === undefined) {
+    return c.json({ error: "owner must be 1-255 chars" }, 400);
   }
 
   const [row] = await db
@@ -61,7 +64,7 @@ escalationsRoute.patch("/:id", async (c) => {
     .update(escalations)
     .set({
       status: body.status || undefined,
-      owner: body.owner || undefined,
+      owner,
       updatedAt: new Date(),
     })
     .where(eq(escalations.id, id))

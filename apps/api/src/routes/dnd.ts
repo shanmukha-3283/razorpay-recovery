@@ -3,6 +3,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { dndEntries } from "../db/schema.js";
 import { parsePagination, paginationMeta } from "./pagination.js";
+import { clampString, isValidEmail, parseJsonBody } from "./validation.js";
 
 const dndRoute = new Hono();
 
@@ -27,21 +28,25 @@ dndRoute.get("/", async (c) => {
 });
 
 dndRoute.post("/", async (c) => {
-  let body: { email?: string; reason?: string };
-  try {
-    body = (await c.req.json()) as typeof body;
-  } catch {
-    return c.json({ error: "Invalid JSON body" }, 400);
-  }
+  const parsed = await parseJsonBody<{ email?: string; reason?: string }>(c);
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+  const body = parsed.value;
 
-  const email = (body.email || "").trim().toLowerCase();
-  if (!email || !email.includes("@")) {
+  const email = isValidEmail(body.email)
+    ? (body.email as string).trim().toLowerCase()
+    : null;
+  if (!email) {
     return c.json({ error: "a valid email is required" }, 400);
+  }
+  const reason =
+    body.reason === undefined ? null : clampString(body.reason, 500);
+  if (body.reason !== undefined && reason === null) {
+    return c.json({ error: "reason must be 1-500 chars" }, 400);
   }
 
   const [row] = await db
     .insert(dndEntries)
-    .values({ email, reason: body.reason || null })
+    .values({ email, reason })
     .onConflictDoNothing({ target: dndEntries.email })
     .returning();
 

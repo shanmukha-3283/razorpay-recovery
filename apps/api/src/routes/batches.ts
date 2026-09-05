@@ -3,6 +3,7 @@ import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   abandonedCheckouts,
+  auditLedger,
   payments,
   receivableInvoices,
   recoveryAttempts,
@@ -10,6 +11,7 @@ import {
   subscriptions,
 } from "../db/schema.js";
 import { parsePagination, paginationMeta } from "./pagination.js";
+import { clampString, parseJsonBody } from "./validation.js";
 import type { RecoveryDomain } from "../queue/retryPolicy.js";
 
 const batchesRoute = new Hono();
@@ -172,19 +174,28 @@ export async function batchReport(batch: BatchRow): Promise<BatchReport> {
 const DOMAINS: RecoveryDomain[] = ["subscription", "checkout", "receivable"];
 
 batchesRoute.post("/", async (c) => {
-  let body: { name?: string; domain?: string; created_by?: string };
-  try {
-    body = (await c.req.json()) as typeof body;
-  } catch {
-    return c.json({ error: "Invalid JSON body" }, 400);
-  }
+  const parsed = await parseJsonBody<{
+    name?: string;
+    domain?: string;
+    created_by?: string;
+  }>(c);
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+  const body = parsed.value;
 
-  if (!body.name?.trim()) return c.json({ error: "name is required" }, 400);
+  const name = clampString(body.name, 255);
+  if (!name) {
+    return c.json({ error: "name is required (1-255 chars)" }, 400);
+  }
   if (!body.domain || !(DOMAINS as string[]).includes(body.domain)) {
     return c.json(
       { error: `domain must be one of: ${DOMAINS.join(", ")}` },
       400
     );
+  }
+  const createdBy =
+    body.created_by === undefined ? null : clampString(body.created_by, 255);
+  if (body.created_by !== undefined && createdBy === null) {
+    return c.json({ error: "created_by must be 1-255 chars" }, 400);
   }
 
   const [open] = await db
@@ -208,10 +219,10 @@ batchesRoute.post("/", async (c) => {
   const [batch] = await db
     .insert(recoveryBatches)
     .values({
-      name: body.name.trim(),
+      name,
       domain: body.domain,
       status: "open",
-      createdBy: body.created_by || null,
+      createdBy,
     })
     .returning();
 
@@ -221,17 +232,45 @@ batchesRoute.post("/", async (c) => {
 batchesRoute.post("/:id/close", async (c) => {
   const id = c.req.param("id");
 
-  const [batch] = await db
-    .select({ id: recoveryBatches.id, status: recoveryBatches.status })
+  const [batch] = (await db
+    .select()
     .from(recoveryBatches)
-    .where(eq(recoveryBatches.id, id));
+    .where(eq(recoveryBatches.id, id))) as BatchRow[];
 
   if (!batch) return c.json({ error: "Batch not found" }, 404);
+  if (batch.status !== "open") {
+    return c.json({ error: "Batch is already closed" }, 409);
+  }
 
-  await db
+  // Guard the state transition itself so a concurrent close can't slip
+  // through between the check above and this update.
+  const [closed] = await db
     .update(recoveryBatches)
     .set({ status: "closed", closedAt: new Date() })
-    .where(eq(recoveryBatches.id, id));
+    .where(
+      and(eq(recoveryBatches.id, id), eq(recoveryBatches.status, "open"))
+    )
+    .returning({ id: recoveryBatches.id });
+
+  if (!closed) {
+    return c.json({ error: "Batch is already closed" }, 409);
+  }
+
+  // The close itself is a money-relevant action: record the frozen numbers
+  // so the "every action → audit_ledger" invariant holds for batches too.
+  const report = await batchReport({ ...batch, status: "closed" });
+  await db.insert(auditLedger).values({
+    recoveryAttemptId: null,
+    action: "batch.closed",
+    amount: report.recoveredAmount,
+    metadata: {
+      batchId: id,
+      domain: batch.domain,
+      name: batch.name,
+      touchedOwners: report.touchedOwners,
+      recoveredOwners: report.recoveredOwners,
+    },
+  });
 
   return c.json({ data: { id, status: "closed" } });
 });

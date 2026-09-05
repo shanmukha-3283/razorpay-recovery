@@ -101,29 +101,27 @@ export async function getSubscription(
 ): Promise<RazorpaySubscription> {
   return request<RazorpaySubscription>(
     "GET",
-    `/subscriptions/${razorpaySubscriptionId}`
+    `/subscriptions/${encodeURIComponent(razorpaySubscriptionId)}`
   );
 }
 
 export async function pauseSubscription(
   razorpaySubscriptionId: string
 ): Promise<RazorpaySubscription> {
-  return request<RazorpaySubscription>(
-    "POST",
-    `/subscriptions/${razorpaySubscriptionId}/pause`,
-    { pause_at: "now" }
-  );
+  const id = encodeURIComponent(razorpaySubscriptionId);
+  return request<RazorpaySubscription>(`POST`, `/subscriptions/${id}/pause`, {
+    pause_at: "now",
+  });
 }
 
 export async function cancelSubscription(
   razorpaySubscriptionId: string,
   cancelAtCycleEnd = false
 ): Promise<RazorpaySubscription> {
-  return request<RazorpaySubscription>(
-    "POST",
-    `/subscriptions/${razorpaySubscriptionId}/cancel`,
-    { cancel_at_cycle_end: cancelAtCycleEnd }
-  );
+  const id = encodeURIComponent(razorpaySubscriptionId);
+  return request<RazorpaySubscription>(`POST`, `/subscriptions/${id}/cancel`, {
+    cancel_at_cycle_end: cancelAtCycleEnd,
+  });
 }
 
 export async function getSubscriptionInvoices(
@@ -132,7 +130,7 @@ export async function getSubscriptionInvoices(
 ): Promise<RazorpayInvoice[]> {
   const data = await request<{ items: RazorpayInvoice[] }>(
     "GET",
-    `/invoices?subscription_id=${razorpaySubscriptionId}&count=${count}`
+    `/invoices?subscription_id=${encodeURIComponent(razorpaySubscriptionId)}&count=${count}`
   );
   return data.items ?? [];
 }
@@ -142,7 +140,7 @@ export async function issueInvoice(
 ): Promise<RazorpayInvoice> {
   return request<RazorpayInvoice>(
     "POST",
-    `/invoices/${invoiceId}/issue`
+    `/invoices/${encodeURIComponent(invoiceId)}/issue`
   );
 }
 
@@ -161,5 +159,8 @@ export type RazorpayOrder = {
 export async function getOrder(
   razorpayOrderId: string
 ): Promise<RazorpayOrder> {
-  return request<RazorpayOrder>("GET", `/orders/${razorpayOrderId}`);
+  return request<RazorpayOrder>(
+    "GET",
+    `/orders/${encodeURIComponent(razorpayOrderId)}`
+  );
 }

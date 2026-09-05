@@ -50,6 +50,13 @@
       "when": 1788533829035,
       "tag": "0006_lying_ares",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788623414446,
+      "tag": "0007_aromatic_hairball",
+      "breakpoints": true
     }
   ]
 }

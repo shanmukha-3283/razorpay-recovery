@@ -1,0 +1,1 @@
+ALTER TABLE "audit_ledger" ALTER COLUMN "recovery_attempt_id" DROP NOT NULL;

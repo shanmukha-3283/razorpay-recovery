@@ -167,7 +167,7 @@ export type RawEvent = {
 
 export type AuditEntry = {
   id: string;
-  recoveryAttemptId: string;
+  recoveryAttemptId: string | null;
   action: string;
   amount: number | null;
   timestamp: string;

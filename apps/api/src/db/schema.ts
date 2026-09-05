@@ -150,9 +150,11 @@ export const recoveryAttempts = pgTable("recovery_attempts", {
 
 export const auditLedger = pgTable("audit_ledger", {
   id: uuid("id").defaultRandom().primaryKey(),
-  recoveryAttemptId: uuid("recovery_attempt_id")
-    .references(() => recoveryAttempts.id)
-    .notNull(),
+  // Nullable: attempt-scoped actions link here; batch-level actions
+  // (e.g. batch.closed) record null with the batch id in metadata.
+  recoveryAttemptId: uuid("recovery_attempt_id").references(
+    () => recoveryAttempts.id
+  ),
   action: varchar("action", { length: 100 }).notNull(),
   amount: integer("amount"),
   timestamp: timestamp("timestamp").defaultNow().notNull(),

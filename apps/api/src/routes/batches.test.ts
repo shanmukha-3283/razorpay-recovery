@@ -3,6 +3,7 @@ import { Hono } from "hono";
 
 const selectQueue = vi.hoisted(() => ({ rows: [] as any[][] }));
 const insertReturning = vi.hoisted(() => vi.fn());
+const inserted = vi.hoisted(() => ({ rows: [] as any[] }));
 const updated = vi.hoisted(() => ({ sets: [] as any[] }));
 
 vi.mock("../db/index.js", () => {
@@ -35,20 +36,28 @@ vi.mock("../db/index.js", () => {
       select: queuedSelect,
       selectDistinct: queuedSelect,
       insert: () => ({
-      values: () => ({
-        onConflictDoUpdate: () => ({
+      values: (v: any) => {
+        inserted.rows.push(v);
+        return {
+          onConflictDoUpdate: () => ({
+            returning: async () => insertReturning(),
+          }),
           returning: async () => insertReturning(),
-        }),
-        returning: async () => insertReturning(),
-      }),
+        };
+      },
     }),
     update: () => ({
       set: (s: any) => {
         updated.sets.push(s);
-        return {
-          where: async () => [],
-          returning: async () => [{ id: "b_1", status: "closed" }],
+        // where() stays awaitable (old call sites) and supports
+        // .returning() for guarded updates (close route).
+        const whereResult = Promise.resolve([]) as unknown as Promise<
+          unknown[]
+        > & {
+          returning: () => Promise<unknown[]>;
         };
+        whereResult.returning = async () => [{ id: "b_1", status: "closed" }];
+        return { where: () => whereResult };
       },
     }),
     },
@@ -77,6 +86,7 @@ describe("batches routes", () => {
   beforeEach(() => {
     selectQueue.rows = [];
     updated.sets = [];
+    inserted.rows = [];
     insertReturning.mockReset();
   });
 
@@ -155,8 +165,13 @@ describe("batches routes", () => {
     expect(res.status).toBe(404);
   });
 
-  it("POST /:id/close closes and reports", async () => {
-    selectQueue.rows = [[{ id: "b_1", status: "open" }]];
+  it("POST /:id/close closes, audits, and reports", async () => {
+    selectQueue.rows = [
+      [{ ...BATCH, status: "open" }],
+      [],
+      [{ count: 0 }],
+      [],
+    ];
 
     const res = await makeApp().request("/api/batches/b_1/close", {
       method: "POST",
@@ -166,5 +181,22 @@ describe("batches routes", () => {
     expect(updated.sets).toContainEqual(
       expect.objectContaining({ status: "closed" })
     );
+    expect(inserted.rows).toContainEqual(
+      expect.objectContaining({
+        action: "batch.closed",
+        recoveryAttemptId: null,
+      })
+    );
+  });
+
+  it("POST /:id/close refuses an already-closed batch", async () => {
+    selectQueue.rows = [[{ ...BATCH, status: "closed" }]];
+
+    const res = await makeApp().request("/api/batches/b_1/close", {
+      method: "POST",
+    });
+
+    expect(res.status).toBe(409);
+    expect(inserted.rows).toHaveLength(0);
   });
 });

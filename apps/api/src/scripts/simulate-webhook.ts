@@ -14,6 +14,7 @@ function paymentFailedPayload(subscriptionId: string) {
     entity: "event",
     id: `evt_${Date.now()}`,
     event: "payment.failed",
+    created_at: Math.floor(Date.now() / 1000),
     contains: ["payment"],
     payload: {
       payment: {

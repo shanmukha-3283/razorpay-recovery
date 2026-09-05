@@ -8,6 +8,13 @@ import {
   subscriptions,
 } from "../db/schema.js";
 import { parsePagination, paginationMeta } from "./pagination.js";
+import {
+  escapeLike,
+  isValidAmount,
+  MAX_AMOUNT,
+  parseJsonBody,
+  sanitizeCurrency,
+} from "./validation.js";
 import { getSubscription, RazorpayApiError } from "../razorpay/client.js";
 import { syncSubscription } from "../handlers/sync.js";
 import { scheduleRecovery } from "../queue/scheduler.js";
@@ -24,7 +31,9 @@ subscriptionsRoute.get("/", async (c) => {
 
   const conditions = [];
   if (status) conditions.push(eq(subscriptions.status, status));
-  if (planId) conditions.push(ilike(subscriptions.planId, `%${planId}%`));
+  if (planId) {
+    conditions.push(ilike(subscriptions.planId, `%${escapeLike(planId)}%`));
+  }
 
   const where = conditions.length ? and(...conditions) : undefined;
 
@@ -148,9 +157,10 @@ subscriptionsRoute.post("/:id/sync", async (c) => {
     remote = await getSubscription(sub.razorpaySubscriptionId);
   } catch (err) {
     if (err instanceof RazorpayApiError) {
-      return c.json({ error: err.message, code: err.code }, 502);
+      return c.json({ error: "Razorpay lookup failed" }, 502);
     }
-    throw err;
+    console.error("Unexpected sync error:", err);
+    return c.json({ error: "Sync failed" }, 502);
   }
 
   await syncSubscription(sub.razorpaySubscriptionId, {
@@ -178,15 +188,22 @@ subscriptionsRoute.post("/:id/recover", async (c) => {
 
   // Amount resolution: explicit body override, else the latest failed
   // payment for this subscription, else a zero-amount fallback.
-  let body: { amount?: number; currency?: string } = {};
-  try {
-    body = (await c.req.json()) as typeof body;
-  } catch {
-    body = {};
+  const parsed = await parseJsonBody<{ amount?: number; currency?: string }>(c);
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+  const body = parsed.value;
+
+  if (body.amount !== undefined && !isValidAmount(body.amount)) {
+    return c.json(
+      { error: `amount must be a finite number between 0 and ${MAX_AMOUNT}` },
+      400
+    );
+  }
+  if (body.currency !== undefined && sanitizeCurrency(body.currency) === null) {
+    return c.json({ error: "currency must be a 3-letter ISO code" }, 400);
   }
 
-  let amount = typeof body.amount === "number" ? body.amount : null;
-  let currency = body.currency ?? null;
+  let amount = body.amount ?? null;
+  let currency = body.currency ? (sanitizeCurrency(body.currency) as string) : null;
 
   if (amount === null || currency === null) {
     const [latestFailed] = await db

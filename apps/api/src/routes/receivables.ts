@@ -8,6 +8,16 @@ import {
   recoveryAttempts,
 } from "../db/schema.js";
 import { parsePagination, paginationMeta } from "./pagination.js";
+import {
+  clampString,
+  isValidAmount,
+  isValidEmail,
+  MAX_AMOUNT,
+  MAX_CSV_BYTES,
+  MAX_CSV_ROWS,
+  parseJsonBody,
+  sanitizeCurrency,
+} from "./validation.js";
 import { scheduleRecovery } from "../queue/scheduler.js";
 import { checkPromiseBreaches } from "../queue/sweeps.js";
 
@@ -102,17 +112,29 @@ async function maybeSchedule(invoiceId: string, amount: number, currency: string
 }
 
 receivablesRoute.post("/", async (c) => {
-  let body: ReceivableBody;
-  try {
-    body = (await c.req.json()) as ReceivableBody;
-  } catch {
-    return c.json({ error: "Invalid JSON body" }, 400);
-  }
+  const parsed = await parseJsonBody<ReceivableBody>(c);
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+  const body = parsed.value;
 
-  const externalId = body.external_id || "";
+  const externalId = (body.external_id || "").trim().slice(0, 255);
   if (!externalId) return c.json({ error: "external_id is required" }, 400);
-  if (typeof body.amount !== "number" || isNaN(body.amount) || body.amount < 0) {
-    return c.json({ error: "amount must be a non-negative number" }, 400);
+  if (!isValidAmount(body.amount)) {
+    return c.json(
+      { error: `amount must be a finite number between 0 and ${MAX_AMOUNT}` },
+      400
+    );
+  }
+  const currency = body.currency
+    ? sanitizeCurrency(body.currency)
+    : "INR";
+  if (!currency) {
+    return c.json({ error: "currency must be a 3-letter ISO code" }, 400);
+  }
+  if (body.customer_email != null && !isValidEmail(body.customer_email)) {
+    return c.json({ error: "customer_email is not valid" }, 400);
+  }
+  if (body.customer_name != null && clampString(body.customer_name, 255) === null) {
+    return c.json({ error: "customer_name must be 1-255 chars" }, 400);
   }
 
   const dueDate = parseDueDate(body.due_date ?? null);
@@ -122,10 +144,10 @@ receivablesRoute.post("/", async (c) => {
 
   const invoice = await upsertInvoice({
     externalId,
-    customerName: body.customer_name || null,
-    customerEmail: body.customer_email || null,
+    customerName: body.customer_name?.trim() || null,
+    customerEmail: body.customer_email?.trim().toLowerCase() || null,
     amount: body.amount,
-    currency: body.currency || "INR",
+    currency,
     dueDate,
   });
 
@@ -133,11 +155,7 @@ receivablesRoute.post("/", async (c) => {
     return c.json({ data: { id: invoice.id, status: "paid", scheduled: false } });
   }
 
-  const scheduled = await maybeSchedule(
-    invoice.id,
-    body.amount,
-    body.currency || "INR"
-  );
+  const scheduled = await maybeSchedule(invoice.id, body.amount, currency);
   return c.json({ data: { id: invoice.id, status: "overdue", ...scheduled } });
 });
 
@@ -148,6 +166,12 @@ receivablesRoute.post("/import", async (c) => {
   if (!text.trim()) {
     return c.json({ error: "Empty CSV body" }, 400);
   }
+  if (text.length > MAX_CSV_BYTES) {
+    return c.json(
+      { error: `CSV body too large (max ${MAX_CSV_BYTES} bytes)` },
+      400
+    );
+  }
 
   const parsed = Papa.parse<CsvRow>(text, {
     header: true,
@@ -156,8 +180,11 @@ receivablesRoute.post("/import", async (c) => {
   });
 
   if (parsed.errors.length > 0) {
+    return c.json({ error: "CSV parse error" }, 400);
+  }
+  if (parsed.data.length > MAX_CSV_ROWS) {
     return c.json(
-      { error: "CSV parse error", details: parsed.errors.slice(0, 5) },
+      { error: `Too many rows (max ${MAX_CSV_ROWS} per import)` },
       400
     );
   }
@@ -166,15 +193,20 @@ receivablesRoute.post("/import", async (c) => {
     [];
 
   for (const row of parsed.data) {
-    const externalId = (row.external_id || "").trim();
+    const externalId = (row.external_id || "").trim().slice(0, 255);
     const amount = Number(row.amount);
     const dueDate = parseDueDate(row.due_date ?? null);
+    const currency = row.currency?.trim()
+      ? sanitizeCurrency(row.currency)
+      : "INR";
+    const customerEmail = row.customer_email?.trim().toLowerCase() || null;
+    const customerName = row.customer_name?.trim() || null;
 
     if (!externalId) {
       results.push({ external_id: "", ok: false, error: "missing external_id" });
       continue;
     }
-    if (isNaN(amount) || amount < 0) {
+    if (!isValidAmount(amount)) {
       results.push({ external_id: externalId, ok: false, error: "invalid amount" });
       continue;
     }
@@ -182,25 +214,38 @@ receivablesRoute.post("/import", async (c) => {
       results.push({ external_id: externalId, ok: false, error: "invalid due_date" });
       continue;
     }
+    if (!currency) {
+      results.push({ external_id: externalId, ok: false, error: "invalid currency" });
+      continue;
+    }
+    if (customerEmail !== null && !isValidEmail(customerEmail)) {
+      results.push({ external_id: externalId, ok: false, error: "invalid customer_email" });
+      continue;
+    }
+    if (customerName !== null && clampString(customerName, 255) === null) {
+      results.push({ external_id: externalId, ok: false, error: "invalid customer_name" });
+      continue;
+    }
 
     try {
       const invoice = await upsertInvoice({
         externalId,
-        customerName: row.customer_name?.trim() || null,
-        customerEmail: row.customer_email?.trim() || null,
+        customerName,
+        customerEmail,
         amount,
-        currency: row.currency?.trim() || "INR",
+        currency,
         dueDate,
       });
       if (invoice.status !== "paid") {
-        await maybeSchedule(invoice.id, amount, row.currency?.trim() || "INR");
+        await maybeSchedule(invoice.id, amount, currency);
       }
       results.push({ external_id: externalId, ok: true });
     } catch (err) {
+      console.error("CSV row insert failed:", err);
       results.push({
         external_id: externalId,
         ok: false,
-        error: err instanceof Error ? err.message : "insert failed",
+        error: "insert failed",
       });
     }
   }
@@ -214,15 +259,21 @@ receivablesRoute.post("/import", async (c) => {
 receivablesRoute.post("/:id/promises", async (c) => {
   const id = c.req.param("id");
 
-  let body: { promised_amount?: number; promised_date?: string };
-  try {
-    body = (await c.req.json()) as typeof body;
-  } catch {
-    return c.json({ error: "Invalid JSON body" }, 400);
-  }
+  const parsed = await parseJsonBody<{
+    promised_amount?: number;
+    promised_date?: string;
+  }>(c);
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+  const body = parsed.value;
 
   if (!body.promised_date || isNaN(new Date(body.promised_date).getTime())) {
     return c.json({ error: "promised_date must be a valid date" }, 400);
+  }
+  if (body.promised_amount !== undefined && !isValidAmount(body.promised_amount)) {
+    return c.json(
+      { error: `promised_amount must be a finite number between 0 and ${MAX_AMOUNT}` },
+      400
+    );
   }
 
   const [invoice] = await db
@@ -239,8 +290,7 @@ receivablesRoute.post("/:id/promises", async (c) => {
     .insert(paymentPromises)
     .values({
       invoiceId: id,
-      promisedAmount:
-        typeof body.promised_amount === "number" ? body.promised_amount : null,
+      promisedAmount: body.promised_amount ?? null,
       promisedDate: new Date(body.promised_date),
       status: "open",
     })

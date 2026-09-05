@@ -32,9 +32,14 @@ function AuditPage() {
     {
       header: "Recovery attempt",
       accessorKey: "recoveryAttemptId",
-      cell: ({ getValue }) => (
-        <span className="font-mono text-xs">{(getValue() as string).slice(0, 8)}</span>
-      ),
+      cell: ({ getValue }) => {
+        const value = getValue() as string | null;
+        return value ? (
+          <span className="font-mono text-xs">{value.slice(0, 8)}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        );
+      },
     },
     {
       header: "Type",

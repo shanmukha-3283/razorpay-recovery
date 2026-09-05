@@ -7,6 +7,15 @@ import {
   recoveryAttempts,
 } from "../db/schema.js";
 import { parsePagination, paginationMeta } from "./pagination.js";
+import {
+  clampString,
+  isValidAmount,
+  isValidEmail,
+  isValidProviderId,
+  MAX_AMOUNT,
+  parseJsonBody,
+  sanitizeCurrency,
+} from "./validation.js";
 import { getOrder, RazorpayApiError } from "../razorpay/client.js";
 import { scheduleRecovery } from "../queue/scheduler.js";
 
@@ -22,16 +31,47 @@ type AbandonBody = {
 };
 
 checkoutsRoute.post("/abandoned", async (c) => {
-  let body: AbandonBody;
-  try {
-    body = (await c.req.json()) as AbandonBody;
-  } catch {
-    return c.json({ error: "Invalid JSON body" }, 400);
-  }
+  const parsed = await parseJsonBody<AbandonBody>(c);
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+  const body = parsed.value;
 
-  const orderId = body.order_id || "";
-  if (!orderId) {
-    return c.json({ error: "order_id is required" }, 400);
+  const orderId = (body.order_id || "").trim();
+  if (!isValidProviderId(orderId)) {
+    return c.json(
+      { error: "order_id is required (alphanumeric, dash/underscore, max 64 chars)" },
+      400
+    );
+  }
+  if (body.amount !== undefined && !isValidAmount(body.amount)) {
+    return c.json(
+      { error: `amount must be a finite number between 0 and ${MAX_AMOUNT}` },
+      400
+    );
+  }
+  const currency = body.currency
+    ? sanitizeCurrency(body.currency)
+    : "INR";
+  if (!currency) {
+    return c.json({ error: "currency must be a 3-letter ISO code" }, 400);
+  }
+  const email =
+    body.email == null
+      ? null
+      : isValidEmail(body.email)
+        ? body.email.trim().toLowerCase()
+        : null;
+  if (body.email != null && email === null) {
+    return c.json({ error: "email is not valid" }, 400);
+  }
+  const contact =
+    body.contact == null ? null : clampString(body.contact, 50);
+  if (body.contact != null && contact === null) {
+    return c.json({ error: "contact must be 1-50 chars" }, 400);
+  }
+  const shortUrl =
+    body.short_url == null ? null : clampString(body.short_url, 500);
+  if (body.short_url != null && shortUrl === null) {
+    return c.json({ error: "short_url must be 1-500 chars" }, 400);
   }
 
   // Best-effort verification against Razorpay when credentials exist.
@@ -40,12 +80,19 @@ checkoutsRoute.post("/abandoned", async (c) => {
   try {
     remote = await getOrder(orderId);
   } catch (err) {
-    if (!(err instanceof RazorpayApiError)) throw err;
+    if (!(err instanceof RazorpayApiError)) {
+      console.error("Unexpected order lookup error:", err);
+    }
     remote = null;
   }
 
-  const amount = body.amount ?? remote?.amount ?? 0;
-  const currency = body.currency ?? remote?.currency ?? "INR";
+  const rawAmount = body.amount ?? remote?.amount ?? 0;
+  const amount = isValidAmount(rawAmount) ? rawAmount : 0;
+  const remoteCurrency =
+    remote?.currency !== undefined
+      ? sanitizeCurrency(remote.currency)
+      : undefined;
+  const resolvedCurrency = currency ?? remoteCurrency ?? "INR";
 
   // Already paid? Record recovered without scheduling anything.
   const [captured] = await db
@@ -62,10 +109,10 @@ checkoutsRoute.post("/abandoned", async (c) => {
       .values({
         razorpayOrderId: orderId,
         amount,
-        currency,
-        email: body.email || null,
-        contact: body.contact || null,
-        shortUrl: body.short_url || null,
+        currency: resolvedCurrency,
+        email,
+        contact,
+        shortUrl,
         status: "recovered",
       })
       .onConflictDoUpdate({
@@ -81,18 +128,18 @@ checkoutsRoute.post("/abandoned", async (c) => {
     .values({
       razorpayOrderId: orderId,
       amount,
-      currency,
-      email: body.email || null,
-      contact: body.contact || null,
-      shortUrl: body.short_url || null,
+      currency: resolvedCurrency,
+      email,
+      contact,
+      shortUrl,
       status: "abandoned",
     })
     .onConflictDoUpdate({
       target: abandonedCheckouts.razorpayOrderId,
       set: {
-        email: body.email || undefined,
-        contact: body.contact || undefined,
-        shortUrl: body.short_url || undefined,
+        email: email || undefined,
+        contact: contact || undefined,
+        shortUrl: shortUrl || undefined,
         updatedAt: new Date(),
       },
     })
@@ -129,7 +176,7 @@ checkoutsRoute.post("/abandoned", async (c) => {
     domain: "checkout",
     ownerId: row.id,
     amount,
-    currency,
+    currency: resolvedCurrency,
   });
 
   if (!decision.allowed || !decision.scheduledFor) {
