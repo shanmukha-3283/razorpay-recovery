@@ -11,3 +11,8 @@ PROJECT_WORKFLOW.md
 DEMO_SCRIPT.md
 EVALUATOR_GUIDE.md
 problem-statement.txt
+
+# Local key files (never commit secrets)
+gemini-key.txt
+*-key.csv
+*-key.txt

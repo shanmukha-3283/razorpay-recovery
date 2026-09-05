@@ -10,9 +10,14 @@ services:
     plan: free
     envVars:
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: razorpay-recovery-db
+          property: connectionString
       - key: REDIS_URL
-        sync: false
+        fromService:
+          type: keyvalue
+          name: razorpay-recovery-redis
+          property: connectionString
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
       - key: RAZORPAY_KEY_ID
@@ -24,7 +29,7 @@ services:
       - key: GOOGLE_API_KEY
         sync: false
       - key: GEMINI_MODEL
-        value: gemini-2.0-flash
+        value: gemini-3.6-flash
       - key: RESEND_API_KEY
         sync: false
       - key: DELIVERY_FROM_EMAIL
@@ -55,4 +60,14 @@ services:
           type: web
           name: razorpay-recovery-api
           property: port
+
+  - type: keyvalue
+    name: razorpay-recovery-redis
+    plan: free
+    ipAllowList: []
+
+databases:
+  - name: razorpay-recovery-db
+    databaseName: razorpay_recovery
+    plan: free
 

@@ -9,6 +9,7 @@ import {
 } from "../db/schema.js";
 import { parsePagination, paginationMeta } from "./pagination.js";
 import { scheduleRecovery } from "../queue/scheduler.js";
+import { checkPromiseBreaches } from "../queue/sweeps.js";
 
 const receivablesRoute = new Hono();
 
@@ -283,46 +284,8 @@ receivablesRoute.post("/:id/mark-paid", async (c) => {
 });
 
 receivablesRoute.post("/check-breaches", async (c) => {
-  // Sweep open promises past their date on still-unpaid invoices.
-  // Status-only sweep (no audit rows: breaches carry no attempt id);
-  // the next agent run records the breach with full context.
-  const breached = await db
-    .select({
-      promiseId: paymentPromises.id,
-      invoiceId: paymentPromises.invoiceId,
-    })
-    .from(paymentPromises)
-    .innerJoin(
-      receivableInvoices,
-      eq(paymentPromises.invoiceId, receivableInvoices.id)
-    )
-    .where(
-      and(
-        eq(paymentPromises.status, "open"),
-        lt(paymentPromises.promisedDate, new Date())
-      )
-    );
-
-  let marked = 0;
-  for (const row of breached) {
-    const [invoice] = await db
-      .select({ status: receivableInvoices.status })
-      .from(receivableInvoices)
-      .where(eq(receivableInvoices.id, row.invoiceId));
-    if (!invoice || invoice.status === "paid") continue;
-
-    await db
-      .update(paymentPromises)
-      .set({ status: "breached" })
-      .where(eq(paymentPromises.id, row.promiseId));
-    await db
-      .update(receivableInvoices)
-      .set({ status: "breached", updatedAt: new Date() })
-      .where(eq(receivableInvoices.id, row.invoiceId));
-    marked++;
-  }
-
-  return c.json({ data: { checked: breached.length, breached: marked } });
+  const result = await checkPromiseBreaches();
+  return c.json({ data: result });
 });
 
 receivablesRoute.get("/", async (c) => {
