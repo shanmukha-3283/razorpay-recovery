@@ -41,12 +41,22 @@ services:
       # only if you call the API directly from another origin.
       # - key: WEB_ORIGIN
       #   sync: false
+      # Public web origin (enables CORS for direct browser → API calls;
+      # required now that the frontend calls the API absolutely — see
+      # VITE_API_URL on the web service below).
+      - key: WEB_ORIGIN
+        value: https://razorpay-recovery-web-0qtm.onrender.com
 
   - type: web
     name: razorpay-recovery-web
     runtime: docker
     dockerfilePath: ./apps/web/Dockerfile
     plan: free
+    # Baked at Vite build time: the browser calls the public API directly,
+    # bypassing the nginx /api proxy (which needs private-network env that
+    # manual dashboard deploys don't provide).
+    dockerBuildArgs:
+      VITE_API_URL: https://razorpay-recovery-api-0qtm.onrender.com/api
     envVars:
       # Private-network backend address; the entrypoint renders these
       # into the nginx /api reverse proxy at container start.
